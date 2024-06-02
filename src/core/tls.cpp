@@ -43,11 +43,20 @@ constexpr static TLSPattern TlsPatterns[] = {
 
 #ifdef _WIN32
 static DWORD slot = 0;
+u8* tls_memory{};
+u64 tls_image{};
+u32 tls_image_size{};
 
-void SetTLSStorage(u64 image_address) {
+void SetTLSStorage(u64 image_address, u32 image_size) {
     // Guest apps will use both positive and negative offsets to the TLS pointer.
     // User data at probably in negative offsets, while pthread data at positive offset.
-    const BOOL result = TlsSetValue(slot, reinterpret_cast<LPVOID>(image_address));
+    if (tls_image == 0) {
+        tls_image = image_address;
+        tls_image_size = image_size;
+    }
+    tls_memory = (u8*)std::malloc(tls_image_size + 8192);
+    std::memcpy(tls_memory, reinterpret_cast<LPVOID>(tls_image), tls_image_size);
+    const BOOL result = TlsSetValue(slot, tls_memory + tls_image_size);
     ASSERT(result != 0);
 }
 
@@ -81,6 +90,7 @@ void PatchTLS(u64 segment_addr, u64 segment_size, Xbyak::CodeGenerator& c) {
                 std::memcpy(&offset, code + tls_pattern.pattern_size, sizeof(u64));
                 LOG_INFO(Core_Linker, "PATTERN64 FOUND at {}, reg: {} offset: {:#x}",
                          fmt::ptr(code), tls_pattern.target_reg, offset);
+                continue;
             }
             ASSERT(offset == 0);
 

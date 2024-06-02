@@ -9,6 +9,7 @@
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/thread_management.h"
 #include "core/libraries/libs.h"
+#include "core/tls.h"
 #ifdef _WIN64
 #include <windows.h>
 #endif
@@ -80,6 +81,18 @@ int PS4_SYSV_ABI scePthreadAttrDestroy(ScePthreadAttr* attr) {
         return SCE_OK;
     }
     return SCE_KERNEL_ERROR_EINVAL;
+}
+
+int PS4_SYSV_ABI pthread_attr_destroy(ScePthreadAttr* attr) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
+    int result = scePthreadAttrDestroy(attr);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
 }
 
 int PS4_SYSV_ABI scePthreadAttrSetguardsize(ScePthreadAttr* attr, size_t guard_size) {
@@ -664,6 +677,66 @@ int PS4_SYSV_ABI scePthreadCondTimedwait(ScePthreadCond* cond, ScePthreadMutex* 
     }
 }
 
+int PS4_SYSV_ABI pthread_attr_init(ScePthreadAttr* attr) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
+    int result = scePthreadAttrInit(attr);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
+}
+
+int PS4_SYSV_ABI pthread_attr_setstacksize(ScePthreadAttr* attr, size_t stacksize) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
+    int result = scePthreadAttrSetstacksize(attr, stacksize);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
+}
+
+int PS4_SYSV_ABI pthread_attr_setdetachstate(ScePthreadAttr *attr, int detachstate) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
+    int result = scePthreadAttrSetdetachstate(attr, detachstate);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
+}
+
+int PS4_SYSV_ABI pthread_mutexattr_init(ScePthreadMutexattr *attr) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
+    int result = scePthreadMutexattrInit(attr);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
+}
+
+int PS4_SYSV_ABI pthread_mutexattr_settype(ScePthreadMutexattr *attr, int type) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutex_init redirect to scePthreadMutexInit");
+    int result = scePthreadMutexattrSettype(attr, type);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
+}
+
 int PS4_SYSV_ABI posix_pthread_mutex_init(ScePthreadMutex* mutex, const ScePthreadMutexattr* attr) {
     // LOG_INFO(Kernel_Pthread, "posix pthread_mutex_init redirect to scePthreadMutexInit");
     int result = scePthreadMutexInit(mutex, attr, nullptr);
@@ -829,6 +902,7 @@ static void cleanup_thread(void* arg) {
 static void* run_thread(void* arg) {
     auto* thread = static_cast<ScePthread>(arg);
     Common::SetCurrentThreadName(thread->name.c_str());
+    Core::SetTLSStorage(0, 0);
     void* ret = nullptr;
     g_pthread_self = thread;
     pthread_cleanup_push(cleanup_thread, thread);
@@ -896,6 +970,19 @@ int PS4_SYSV_ABI scePthreadCreate(ScePthread* thread, const ScePthreadAttr* attr
     default:
         return SCE_KERNEL_ERROR_EINVAL;
     }
+}
+
+int PS4_SYSV_ABI pthread_create(ScePthread* thread, const ScePthreadAttr* attr,
+                                pthreadEntryFunc start_routine, void* arg) {
+    LOG_INFO(Kernel_Pthread, "posix pthread_create redirect to scePthreadCreate");
+    int result = scePthreadCreate(thread, attr, start_routine, arg, "PS4_Thread");
+    if (result != 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
 }
 
 ScePthread PThreadPool::Create() {
@@ -1062,6 +1149,14 @@ void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("kDh-NfxgMtE", "libkernel", 1, "libkernel", 1, 1, scePthreadCondSignal);
     LIB_FUNCTION("BmMjYxmew1w", "libkernel", 1, "libkernel", 1, 1, scePthreadCondTimedwait);
     // posix calls
+    LIB_FUNCTION("wtkt-teR1so", "libScePosix", 1, "libkernel", 1, 1, pthread_attr_init);
+    LIB_FUNCTION("2Q0z6rnBrTE", "libScePosix", 1, "libkernel", 1, 1, pthread_attr_setstacksize);
+    LIB_FUNCTION("E+tyo3lp5Lw", "libScePosix", 1, "libkernel", 1, 1, pthread_attr_setdetachstate);
+    LIB_FUNCTION("OxhIB8LB-PQ", "libScePosix", 1, "libkernel", 1, 1, pthread_create);
+    LIB_FUNCTION("zHchY8ft5pk", "libScePosix", 1, "libkernel", 1, 1, pthread_attr_destroy);
+
+    LIB_FUNCTION("dQHWEsJtoE4", "libScePosix", 1, "libkernel", 1, 1, pthread_mutexattr_init);
+    LIB_FUNCTION("mDmgMOGVUqg", "libScePosix", 1, "libkernel", 1, 1, pthread_mutexattr_settype);
     LIB_FUNCTION("ttHNfU+qDBU", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_init);
     LIB_FUNCTION("7H0iTOciTLo", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_lock);
     LIB_FUNCTION("2Z+PpY6CaJg", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_unlock);

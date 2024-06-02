@@ -87,7 +87,7 @@ Module* Linker::LoadModule(const std::filesystem::path& elf_name) {
 }
 
 void Linker::LoadModuleToMemory(Module* m) {
-    // get elf header, program header
+    // Retrieve elf header and program header
     const auto elf_header = m->elf.GetElfHeader();
     const auto elf_pheader = m->elf.GetProgramHeader();
 
@@ -383,9 +383,7 @@ const LibraryInfo* Linker::FindLibrary(const Module& m, const std::string& id) {
 }
 
 void Linker::LoadSymbols(Module* m) {
-
-    const auto symbol_database = [this](Module* m, Loader::SymbolsResolver* symbol,
-                                        bool export_func) {
+    const auto symbol_database = [this, m](Loader::SymbolsResolver* symbol, bool export_func) {
         if (m->dynamic_info.symbol_table == nullptr || m->dynamic_info.str_table == nullptr ||
             m->dynamic_info.symbol_table_total_size == 0) {
             LOG_INFO(Core_Linker, "Symbol table not found!");
@@ -442,8 +440,8 @@ void Linker::LoadSymbols(Module* m) {
             }
         }
     };
-    symbol_database(m, &m->export_sym, true);
-    symbol_database(m, &m->import_sym, false);
+    symbol_database(&m->export_sym, true);
+    symbol_database(&m->import_sym, false);
 }
 
 void Linker::Relocate(Module* m) {
@@ -550,7 +548,6 @@ bool contains(const std::vector<T>& vecObj, const T& element) {
 
 Module* Linker::FindExportedModule(const ModuleInfo& module, const LibraryInfo& library) {
     // std::scoped_lock lock{m_mutex};
-
     for (auto& m : m_modules) {
         const auto& export_libs = m->dynamic_info.export_libs;
         const auto& export_modules = m->dynamic_info.export_modules;
@@ -564,56 +561,53 @@ Module* Linker::FindExportedModule(const ModuleInfo& module, const LibraryInfo& 
 
 void Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Module* m,
                      Loader::SymbolRecord* return_info) {
-    // std::scoped_lock lock{m_mutex};
     const auto ids = Common::SplitString(name, '#');
-    if (ids.size() == 3) {
-        const auto* library = FindLibrary(*m, ids.at(1));
-        const auto* module = FindModule(*m, ids.at(2));
-        ASSERT_MSG(library && module, "Unable to find library and module");
-
-        Loader::SymbolResolver sr{};
-        sr.name = ids.at(0);
-        sr.library = library->name;
-        sr.library_version = library->version;
-        sr.module = module->name;
-        sr.module_version_major = module->version_major;
-        sr.module_version_minor = module->version_minor;
-        sr.type = sym_type;
-
-        const Loader::SymbolRecord* rec = nullptr;
-
-        rec = m_hle_symbols.FindSymbol(sr);
-        if (rec == nullptr) {
-            // check if it an export function
-            if (auto* p = FindExportedModule(*module, *library);
-                p != nullptr && p->export_sym.GetSize() > 0) {
-                rec = p->export_sym.FindSymbol(sr);
-            }
-        }
-        if (rec != nullptr) {
-            *return_info = *rec;
-        } else {
-            auto aeronid = AeroLib::FindByNid(sr.name.c_str());
-            if (aeronid) {
-                return_info->name = aeronid->name;
-                return_info->virtual_address = AeroLib::GetStub(aeronid->nid);
-            } else {
-                return_info->virtual_address = AeroLib::GetStub(sr.name.c_str());
-                return_info->name = "Unknown !!!";
-            }
-            LOG_ERROR(Core_Linker, "Linker: Stub resolved {} as {} (lib: {}, mod: {})", sr.name,
-                      return_info->name, library->name, module->name);
-        }
-    } else {
+    if (ids.size() != 3) {
         return_info->virtual_address = 0;
         return_info->name = name;
         LOG_ERROR(Core_Linker, "Not Resolved {}", name);
+        return;
     }
+
+    const auto* library = FindLibrary(*m, ids.at(1));
+    const auto* module = FindModule(*m, ids.at(2));
+    ASSERT_MSG(library && module, "Unable to find library and module");
+
+    Loader::SymbolResolver sr{};
+    sr.name = ids.at(0);
+    sr.library = library->name;
+    sr.library_version = library->version;
+    sr.module = module->name;
+    sr.module_version_major = module->version_major;
+    sr.module_version_minor = module->version_minor;
+    sr.type = sym_type;
+
+    const auto* record = m_hle_symbols.FindSymbol(sr);
+    if (!record) {
+        // Check if it an export function
+        if (auto* p = FindExportedModule(*module, *library);
+            p && p->export_sym.GetSize() > 0) {
+            record = p->export_sym.FindSymbol(sr);
+        }
+    }
+    if (record) {
+        *return_info = *record;
+        return;
+    }
+
+    const auto aeronid = AeroLib::FindByNid(sr.name.c_str());
+    if (aeronid) {
+        return_info->name = aeronid->name;
+        return_info->virtual_address = AeroLib::GetStub(aeronid->nid);
+    } else {
+        return_info->virtual_address = AeroLib::GetStub(sr.name.c_str());
+        return_info->name = "Unknown !!!";
+    }
+    LOG_ERROR(Core_Linker, "Linker: Stub resolved {} as {} (lib: {}, mod: {})", sr.name,
+              return_info->name, library->name, module->name);
 }
 
 u64 Linker::GetProcParam() {
-    // std::scoped_lock lock{m_mutex};
-
     for (auto& m : m_modules) {
         if (!m->elf.IsSharedLib()) {
             return m->proc_param_virtual_addr;
@@ -621,18 +615,19 @@ u64 Linker::GetProcParam() {
     }
     return 0;
 }
+
 using exit_func_t = PS4_SYSV_ABI void (*)();
 using entry_func_t = PS4_SYSV_ABI void (*)(EntryParams* params, exit_func_t atexit_func);
-using module_ini_func_t = PS4_SYSV_ABI int (*)(size_t args, const void* argp, module_func_t func);
+using module_ini_func_t = PS4_SYSV_ABI int (*)(size_t args, const void* argp, ModuleFunc func);
 
-static PS4_SYSV_ABI int run_module(uint64_t addr, size_t args, const void* argp,
-                                   module_func_t func) {
+static PS4_SYSV_ABI int RunModule(uint64_t addr, size_t args, const void* argp,
+                                   ModuleFunc func) {
     return reinterpret_cast<module_ini_func_t>(addr)(args, argp, func);
 }
 
-int Linker::StartModule(Module* m, size_t args, const void* argp, module_func_t func) {
+int Linker::StartModule(Module* m, size_t args, const void* argp, ModuleFunc func) {
     LOG_INFO(Core_Linker, "Module started : {}", m->file_name);
-    return run_module(m->dynamic_info.init_virtual_addr + m->base_virtual_addr, args, argp, func);
+    return RunModule(m->dynamic_info.init_virtual_addr + m->base_virtual_addr, args, argp, func);
 }
 
 void Linker::StartAllModules() {
@@ -694,7 +689,7 @@ void Linker::Execute() {
             continue;
         }
         if (m->tls.image_virtual_addr != 0) {
-            SetTLSStorage(m->tls.image_virtual_addr);
+            SetTLSStorage(m->tls.image_virtual_addr, m->tls.image_size);
         }
         RunMainEntry(m->elf.GetElfEntry() + m->base_virtual_addr, &p, ProgramExitFunc);
     }

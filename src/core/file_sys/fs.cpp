@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <fmt/core.h>
+#include "common/assert.h"
 #include "core/file_sys/fs.h"
 
 namespace Core::FileSys {
@@ -51,9 +53,11 @@ std::string MntPoints::GetHostFile(const std::string& guest_file) {
         if (find == 0) {
             std::string npath = guest_file.substr(pair.guest_path.size(), guest_file.size() - 1);
             std::replace(pair.host_path.begin(), pair.host_path.end(), '\\', '/');
+            fmt::print("GetHostFile: {}\n", pair.host_path + npath);
             return pair.host_path + npath;
         }
     }
+    UNREACHABLE();
     return "";
 }
 

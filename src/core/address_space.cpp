@@ -102,14 +102,14 @@ struct AddressSpace::Impl {
 
         // Perform the map.
         void* ptr = nullptr;
-        if (phys_addr) {
+        if (phys_addr != -1) {
             ptr = MapViewOfFile3(backing_handle, process, reinterpret_cast<PVOID>(virtual_addr),
                                  phys_addr, size, MEM_REPLACE_PLACEHOLDER, prot, nullptr, 0);
         } else {
             ptr = VirtualAlloc2(process, reinterpret_cast<PVOID>(virtual_addr), size,
                                 MEM_REPLACE_PLACEHOLDER, prot, nullptr, 0);
         }
-        ASSERT(ptr);
+        ASSERT_MSG(ptr, "{}", Common::GetLastErrorMsg());
         return ptr;
     }
 

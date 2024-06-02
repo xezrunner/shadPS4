@@ -9,7 +9,7 @@
 #include "core/loader/symbols_resolver.h"
 
 namespace Core {
-using module_func_t = int (*)(size_t args, const void* argp);
+
 struct DynamicModuleInfo;
 class Linker;
 
@@ -56,7 +56,6 @@ struct LibraryInfo {
 struct PS4ThreadLocal {
     u64 image_virtual_addr = 0;
     u64 image_size = 0;
-    u64 handler_virtual_addr = 0;
 };
 
 struct DynamicModuleInfo {
@@ -103,27 +102,25 @@ struct DynamicModuleInfo {
 
 // This struct keeps neccesary info about loaded modules. Main executeable is included too as well
 struct Module {
-    Loader::Elf elf;
     u64 aligned_base_size = 0;
-    u64 base_virtual_addr = 0;
-    u64 proc_param_virtual_addr = 0;
-
+    VAddr base_virtual_addr = 0;
+    VAddr proc_param_virtual_addr = 0;
     std::string file_name;
-
+    Loader::Elf elf;
     std::vector<u8> m_dynamic;
     std::vector<u8> m_dynamic_data;
     DynamicModuleInfo dynamic_info{};
-
     Loader::SymbolsResolver export_sym;
     Loader::SymbolsResolver import_sym;
-
     PS4ThreadLocal tls;
 };
 
+using ModuleFunc = int (*)(size_t, const void*);
+
 class Linker {
 public:
-    Linker();
-    virtual ~Linker();
+    explicit Linker();
+    ~Linker();
 
     Module* LoadModule(const std::filesystem::path& elf_name);
     void LoadModuleToMemory(Module* m);
@@ -143,7 +140,7 @@ private:
     const ModuleInfo* FindModule(const Module& m, const std::string& id);
     const LibraryInfo* FindLibrary(const Module& program, const std::string& id);
     Module* FindExportedModule(const ModuleInfo& m, const LibraryInfo& l);
-    int StartModule(Module* m, size_t args, const void* argp, module_func_t func);
+    int StartModule(Module* m, size_t args, const void* argp, ModuleFunc func);
     void StartAllModules();
 
     std::vector<std::unique_ptr<Module>> m_modules;
