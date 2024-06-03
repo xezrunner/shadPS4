@@ -114,7 +114,7 @@ Image& TextureCache::FindImage(const ImageInfo& info, VAddr cpu_address) {
     std::unique_lock lock{m_page_table};
     boost::container::small_vector<ImageId, 2> image_ids;
     ForEachImageInRegion(cpu_address, info.guest_size_bytes, [&](ImageId image_id, Image& image) {
-        if (image.cpu_addr == cpu_address) {
+        if (image.cpu_addr == cpu_address && image.info.size.width == info.size.width) {
             image_ids.push_back(image_id);
         }
     });
@@ -342,7 +342,7 @@ void TextureCache::UpdatePagesCachedCount(VAddr addr, u64 size, s32 delta) {
         const u32 interval_size = interval_end_addr - interval_start_addr;
         void* addr = reinterpret_cast<void*>(interval_start_addr);
         if (delta > 0 && count == delta) {
-            // mprotect(addr, interval_size, PAGE_READONLY);
+            mprotect(addr, interval_size, PAGE_READONLY);
         } else if (delta < 0 && count == -delta) {
             mprotect(addr, interval_size, PAGE_READWRITE);
         } else {
