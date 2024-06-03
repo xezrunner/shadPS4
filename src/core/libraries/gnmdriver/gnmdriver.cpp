@@ -367,8 +367,17 @@ int PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState() {
     return ORBIS_OK;
 }
 
-int PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState175() {
-    LOG_ERROR(Lib_GnmDriver, "(STUBBED) called");
+int PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState175(u32* cmdbuf, u32 size) {
+    LOG_TRACE(Lib_GnmDriver, "called");
+
+    if (size > 0xff) {
+        if constexpr (g_fair_hw_init) {
+            ASSERT_MSG(0, "Not implemented");
+        } else {
+            cmdbuf = WriteHeader<PM4ItOpcode::Nop>(cmdbuf, 0xff);
+        }
+        return 0x100; // it is a size, not a retcode
+    }
     return ORBIS_OK;
 }
 
@@ -379,11 +388,11 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState200(u32* cmdbuf, u32 size) {
         if constexpr (g_fair_hw_init) {
             ASSERT_MSG(0, "Not implemented");
         } else {
-            cmdbuf = cmdbuf = WriteHeader<PM4ItOpcode::Nop>(cmdbuf, 0xff);
+            cmdbuf = WriteHeader<PM4ItOpcode::Nop>(cmdbuf, 0xff);
         }
         return 0x100; // it is a size, not a retcode
     }
-    return 0;
+    return ORBIS_OK;
 }
 
 u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState350(u32* cmdbuf, u32 size) {
@@ -393,11 +402,11 @@ u32 PS4_SYSV_ABI sceGnmDrawInitDefaultHardwareState350(u32* cmdbuf, u32 size) {
         if constexpr (g_fair_hw_init) {
             ASSERT_MSG(0, "Not implemented");
         } else {
-            cmdbuf = cmdbuf = WriteHeader<PM4ItOpcode::Nop>(cmdbuf, 0xff);
+            cmdbuf = WriteHeader<PM4ItOpcode::Nop>(cmdbuf, 0xff);
         }
         return 0x100; // it is a size, not a retcode
     }
-    return 0;
+    return ORBIS_OK;
 }
 
 int PS4_SYSV_ABI sceGnmDrawInitToDefaultContextState() {
