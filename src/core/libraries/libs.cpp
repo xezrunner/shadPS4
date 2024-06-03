@@ -28,6 +28,7 @@
 #include "core/libraries/system/systemservice.h"
 #include "core/libraries/system/userservice.h"
 #include "core/libraries/videoout/video_out.h"
+#include "rtc/rtc.h"
 
 namespace Libraries {
 
@@ -61,6 +62,7 @@ void InitHLELibs(Core::Loader::SymbolsResolver* sym) {
     Libraries::ScreenShot::RegisterlibSceScreenShot(sym);
     Libraries::LibcInternal::RegisterlibSceLibcInternal(sym);
     Libraries::AppContent::RegisterlibSceAppContent(sym);
+    Libraries::Rtc::RegisterlibSceRtc(sym);
 }
 
 } // namespace Libraries

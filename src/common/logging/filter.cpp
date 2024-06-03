@@ -102,6 +102,7 @@ bool ParseFilterRule(Filter& instance, Iterator begin, Iterator end) {
     SUB(Lib, Screenshot)                                                                           \
     SUB(Lib, LibCInternal)                                                                         \
     SUB(Lib, AppContent)                                                                           \
+    SUB(Lib, Rtc)                                                                                  \
     CLS(Frontend)                                                                                  \
     CLS(Render)                                                                                    \
     SUB(Render, Vulkan)                                                                            \
