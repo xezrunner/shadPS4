@@ -43,20 +43,9 @@ constexpr static TLSPattern TlsPatterns[] = {
 
 #ifdef _WIN32
 static DWORD slot = 0;
-u8* tls_memory{};
-u64 tls_image{};
-u32 tls_image_size{};
 
-void SetTLSStorage(u64 image_address, u32 image_size) {
-    // Guest apps will use both positive and negative offsets to the TLS pointer.
-    // User data at probably in negative offsets, while pthread data at positive offset.
-    if (tls_image == 0) {
-        tls_image = image_address;
-        tls_image_size = image_size;
-    }
-    tls_memory = (u8*)std::malloc(tls_image_size + 8192);
-    std::memcpy(tls_memory, reinterpret_cast<LPVOID>(tls_image), tls_image_size);
-    const BOOL result = TlsSetValue(slot, tls_memory + tls_image_size);
+void SetTcbBase(void* image_address) {
+    const BOOL result = TlsSetValue(slot, image_address);
     ASSERT(result != 0);
 }
 

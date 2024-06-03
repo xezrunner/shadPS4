@@ -21,7 +21,7 @@ u64 PS4_SYSV_ABI sceKernelGetProcessTime();
 u64 PS4_SYSV_ABI sceKernelGetProcessTimeCounter();
 u64 PS4_SYSV_ABI sceKernelGetProcessTimeCounterFrequency();
 u64 PS4_SYSV_ABI sceKernelReadTsc();
-int PS4_SYSV_ABI sceKernelGettimeofday(SceKernelTimeval *tp);
+int PS4_SYSV_ABI sceKernelGettimeofday(SceKernelTimeval* tp);
 
 void timeSymbolsRegister(Core::Loader::SymbolsResolver* sym);
 

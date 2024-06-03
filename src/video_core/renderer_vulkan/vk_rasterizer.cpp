@@ -41,6 +41,7 @@ void Rasterizer::Draw(bool is_indexed) {
 
     boost::container::static_vector<vk::RenderingAttachmentInfo, Liverpool::NumColorBuffers>
         color_attachments{};
+    const std::array color = {0.5f, 0.5f, 0.5f, 1.f};
     for (auto col_buf_id = 0u; col_buf_id < Liverpool::NumColorBuffers; ++col_buf_id) {
         const auto& col_buf = regs.color_buffers[col_buf_id];
         if (!col_buf) {
@@ -53,10 +54,12 @@ void Rasterizer::Draw(bool is_indexed) {
         color_attachments.push_back({
             .imageView = *image_view.image_view,
             .imageLayout = vk::ImageLayout::eGeneral,
-            .loadOp = vk::AttachmentLoadOp::eLoad,
+            .loadOp = compute_done ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
             .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = vk::ClearValue{color},
         });
     }
+    compute_done = false;
 
     // TODO: Don't restart renderpass every draw
     const auto& scissor = regs.screen_scissor;

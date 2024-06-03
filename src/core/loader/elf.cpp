@@ -445,7 +445,7 @@ std::string Elf::ElfHeaderStr() {
     return header;
 }
 
-std::string Elf::ElfPheaderTypeStr(u32 type) {
+std::string_view Elf::ElfPheaderTypeStr(u32 type) {
     switch (type) {
     case PT_NULL:
         return "Null";
@@ -536,10 +536,6 @@ void Elf::LoadSegment(u64 virtual_addr, u64 file_offset, u64 size) {
         }
     }
     UNREACHABLE();
-}
-
-bool Elf::IsSharedLib() {
-    return m_elf_header.e_type == ET_SCE_DYNAMIC;
 }
 
 } // namespace Core::Loader

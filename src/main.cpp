@@ -76,10 +76,10 @@ int main(int argc, char* argv[]) {
     }
 
     auto linker = Common::Singleton<Core::Linker>::Instance();
-    Libraries::InitHLELibs(&linker->getHLESymbols());
+    Libraries::InitHLELibs(&linker->GetHLESymbols());
     linker->LoadModule(path);
 
-    // check if we have system modules to load
+    // Check if we have system modules to load
     const auto& sys_module_path = Common::FS::GetUserPath(Common::FS::PathType::SysModuleDir);
     for (const auto& entry : std::filesystem::directory_iterator(sys_module_path)) {
         if (entry.path().filename() == "libSceNgs2.sprx") {
@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
         }
     }
     if (!found) {
-        Libraries::LibC::libcSymbolsRegister(&linker->getHLESymbols());
+        Libraries::LibC::libcSymbolsRegister(&linker->GetHLESymbols());
     }
     std::thread mainthread([linker]() { linker->Execute(); });
     Discord::RPC discordRPC;

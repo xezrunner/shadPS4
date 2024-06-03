@@ -204,7 +204,7 @@ int PS4_SYSV_ABI posix_stat(const char* path, OrbisKernelStat* sb) {
     return ORBIS_OK;
 }
 
-int PS4_SYSV_ABI sceKernelCheckReachability(const char *path) {
+int PS4_SYSV_ABI sceKernelCheckReachability(const char* path) {
     LOG_INFO(Lib_Kernel, "path = {}", path);
     auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
     std::string path_name = mnt->GetHostFile(path);

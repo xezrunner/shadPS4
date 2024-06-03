@@ -774,6 +774,7 @@ U1 IREmitter::FPLessThanEqual(const F32F64& lhs, const F32F64& rhs, bool ordered
 }
 
 U1 IREmitter::FPGreaterThanEqual(const F32F64& lhs, const F32F64& rhs, bool ordered) {
+    ASSERT(lhs.Type() == rhs.Type());
     if (lhs.Type() != rhs.Type()) {
         throw InvalidArgument("Mismatching types {} and {}", lhs.Type(), rhs.Type());
     }

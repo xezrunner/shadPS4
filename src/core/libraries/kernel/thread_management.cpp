@@ -6,10 +6,12 @@
 #include "common/assert.h"
 #include "common/logging/log.h"
 #include "common/thread.h"
+#include "common/singleton.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/thread_management.h"
 #include "core/libraries/libs.h"
 #include "core/tls.h"
+#include "core/linker.h"
 #ifdef _WIN64
 #include <windows.h>
 #endif
@@ -701,7 +703,7 @@ int PS4_SYSV_ABI pthread_attr_setstacksize(ScePthreadAttr* attr, size_t stacksiz
     return result;
 }
 
-int PS4_SYSV_ABI pthread_attr_setdetachstate(ScePthreadAttr *attr, int detachstate) {
+int PS4_SYSV_ABI pthread_attr_setdetachstate(ScePthreadAttr* attr, int detachstate) {
     // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
     int result = scePthreadAttrSetdetachstate(attr, detachstate);
     if (result < 0) {
@@ -713,7 +715,7 @@ int PS4_SYSV_ABI pthread_attr_setdetachstate(ScePthreadAttr *attr, int detachsta
     return result;
 }
 
-int PS4_SYSV_ABI pthread_mutexattr_init(ScePthreadMutexattr *attr) {
+int PS4_SYSV_ABI pthread_mutexattr_init(ScePthreadMutexattr* attr) {
     // LOG_INFO(Kernel_Pthread, "posix pthread_mutexattr_init redirect to scePthreadMutexattrInit");
     int result = scePthreadMutexattrInit(attr);
     if (result < 0) {
@@ -725,7 +727,7 @@ int PS4_SYSV_ABI pthread_mutexattr_init(ScePthreadMutexattr *attr) {
     return result;
 }
 
-int PS4_SYSV_ABI pthread_mutexattr_settype(ScePthreadMutexattr *attr, int type) {
+int PS4_SYSV_ABI pthread_mutexattr_settype(ScePthreadMutexattr* attr, int type) {
     // LOG_INFO(Kernel_Pthread, "posix pthread_mutex_init redirect to scePthreadMutexInit");
     int result = scePthreadMutexattrSettype(attr, type);
     if (result < 0) {
@@ -902,7 +904,8 @@ static void cleanup_thread(void* arg) {
 static void* run_thread(void* arg) {
     auto* thread = static_cast<ScePthread>(arg);
     Common::SetCurrentThreadName(thread->name.c_str());
-    Core::SetTLSStorage(0, 0);
+    auto* linker = Common::Singleton<Core::Linker>::Instance();
+    linker->InitTlsForThread();
     void* ret = nullptr;
     g_pthread_self = thread;
     pthread_cleanup_push(cleanup_thread, thread);
@@ -1109,6 +1112,16 @@ int PS4_SYSV_ABI scePthreadEqual(ScePthread thread1, ScePthread thread2) {
     return (thread1 == thread2 ? 1 : 0);
 }
 
+struct TlsIndex {
+    u64 ti_module;
+    u64 ti_offset;
+};
+
+void* PS4_SYSV_ABI __tls_get_addr(TlsIndex* index) {
+    auto* linker = Common::Singleton<Core::Linker>::Instance();
+    return linker->TlsGetAddr(index->ti_module, index->ti_offset);
+}
+
 void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("4+h9EzwKF4I", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetschedpolicy);
     LIB_FUNCTION("-Wreprtu0Qs", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetdetachstate);
@@ -1121,10 +1134,12 @@ void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
 
     LIB_FUNCTION("aI+OeCz8xrQ", "libkernel", 1, "libkernel", 1, 1, scePthreadSelf);
     LIB_FUNCTION("EotR8a3ASf4", "libkernel", 1, "libkernel", 1, 1, pthread_self);
+    LIB_FUNCTION("EotR8a3ASf4", "libScePosix", 1, "libkernel", 1, 1, pthread_self);
     LIB_FUNCTION("3qxgM4ezETA", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetaffinity);
     LIB_FUNCTION("8+s5BzZjxSg", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrGetaffinity);
     LIB_FUNCTION("x1X76arYMxU", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrGet);
     LIB_FUNCTION("UTXzJbWhhTE", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetstacksize);
+    LIB_FUNCTION("vNe1w4diLCs", "libkernel", 1, "libkernel", 1, 1, __tls_get_addr);
 
     LIB_FUNCTION("bt3CTBKmGyI", "libkernel", 1, "libkernel", 1, 1, scePthreadSetaffinity);
     LIB_FUNCTION("6UgtwV+0zb4", "libkernel", 1, "libkernel", 1, 1, scePthreadCreate);

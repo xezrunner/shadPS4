@@ -63,18 +63,28 @@ void Translator::S_AND_SAVEEXEC_B64(const GcnInst& inst) {
     // This instruction normally operates on 64-bit data (EXEC, VCC, SGPRs)
     // However here we flatten it to 1-bit EXEC and 1-bit VCC. For the destination
     // SGPR we have a special IR opcode for SPGRs that act as thread masks.
+    ASSERT(inst.src[0].field == OperandField::VccLo);
     const IR::U1 exec{ir.GetExec()};
+    const IR::U1 vcc{ir.GetVcc()};
 
     // Mark destination SPGR as an EXEC context. This means we will use 1-bit
     // IR instruction whenever it's loaded.
-    ASSERT(inst.dst[0].field == OperandField::ScalarGPR);
-    const u32 reg = inst.dst[0].code;
-    exec_contexts[reg] = true;
-    ir.SetThreadBitScalarReg(IR::ScalarReg(reg), exec);
+    switch (inst.dst[0].field) {
+    case OperandField::ScalarGPR: {
+        const u32 reg = inst.dst[0].code;
+        exec_contexts[reg] = true;
+        ir.SetThreadBitScalarReg(IR::ScalarReg(reg), exec);
+        break;
+    }
+    case OperandField::VccLo:
+        ir.SetVcc(exec);
+        break;
+    default:
+        UNREACHABLE();
+    }
 
     // Update EXEC.
-    ASSERT(inst.src[0].field == OperandField::VccLo);
-    ir.SetExec(ir.LogicalAnd(exec, ir.GetVcc()));
+    ir.SetExec(ir.LogicalAnd(exec, vcc));
 }
 
 void Translator::S_MOV_B64(const GcnInst& inst) {

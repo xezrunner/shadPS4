@@ -11,15 +11,14 @@ class CodeGenerator;
 
 namespace Core {
 
-/// Sets the data pointer that contains the TLS image.
-void SetTLSStorage(u64 image_address, u32 image_size);
+/// Sets the data pointer to the TCB block.
+void SetTcbBase(void* image_address);
 
 /// Patches any instructions that access guest TLS to use provided storage.
 void PatchTLS(u64 segment_addr, u64 segment_size, Xbyak::CodeGenerator& c);
 
 class ThreadLocalStorage {
 public:
-
 };
 
 } // namespace Core

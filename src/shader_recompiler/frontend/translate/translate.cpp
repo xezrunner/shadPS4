@@ -128,7 +128,11 @@ IR::U1U32F32 Translator::GetSrc(const InstOperand& operand, bool force_flt) {
         value = ir.GetExec();
         break;
     case OperandField::VccLo:
-        value = ir.GetVccLo();
+        if (force_flt) {
+            value = ir.BitCast<IR::F32>(ir.GetVccLo());
+        } else {
+            value = ir.GetVccLo();
+        }
         break;
     case OperandField::VccHi:
         value = ir.GetVccHi();

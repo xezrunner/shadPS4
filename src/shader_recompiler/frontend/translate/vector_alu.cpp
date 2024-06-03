@@ -33,7 +33,7 @@ void Translator::V_CNDMASK_B32(const GcnInst& inst) {
     const IR::VectorReg dst_reg{inst.dst[0].code};
     const IR::ScalarReg flag_reg{inst.src[2].code};
     const IR::U1 flag = inst.src[2].field == OperandField::ScalarGPR
-                            ? ir.INotEqual(ir.GetScalarReg(flag_reg), ir.Imm32(0U))
+                            ? ir.GetThreadBitScalarReg(flag_reg)
                             : ir.GetVcc();
 
     // We can treat the instruction as integer most of the time, but when a source is

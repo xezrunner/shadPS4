@@ -287,6 +287,8 @@ set(CORE src/core/aerolib/stubs.cpp
          src/core/linker.h
          src/core/memory.cpp
          src/core/memory.h
+         src/core/module.cpp
+         src/core/module.h
          src/core/platform.h
          src/core/memory.h
          src/core/tls.cpp
