@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
             for (const auto& entry : std::filesystem::directory_iterator(sce_module_folder)) {
                 if (entry.path().filename() == "libc.prx" ||
                     entry.path().filename() == "libSceFios2.prx" ||
-                    entry.path().filename() == "libSceNpToolkit2.prx") {
+                    entry.path().filename() == "libSceNpToolkit.prx") {
                     found = true;
                     LOG_INFO(Loader, "Loading {}", entry.path().string().c_str());
                     linker->LoadModule(entry.path().string().c_str());

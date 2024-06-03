@@ -19,6 +19,7 @@ class Instance;
 
 namespace Libraries::Kernel {
 struct OrbisQueryInfo;
+struct OrbisVirtualQueryInfo;
 }
 
 namespace Core {
@@ -103,7 +104,7 @@ public:
     PAddr Allocate(PAddr search_start, PAddr search_end, size_t size, u64 alignment,
                    int memory_type);
 
-    void Free(PAddr phys_addr, size_t size);
+    int Free(PAddr phys_addr, size_t size);
 
     int MapMemory(void** out_addr, VAddr virtual_addr, size_t size, MemoryProt prot,
                   MemoryMapFlags flags, VMAType type, std::string_view name = "",
@@ -112,6 +113,8 @@ public:
     void UnmapMemory(VAddr virtual_addr, size_t size);
 
     int QueryProtection(VAddr addr, void** start, void** end, u32* prot);
+
+    int VirtualQuery(VAddr addr, int flags, Libraries::Kernel::OrbisVirtualQueryInfo* info);
 
     int DirectMemoryQuery(PAddr addr, bool find_next, Libraries::Kernel::OrbisQueryInfo* out_info);
 

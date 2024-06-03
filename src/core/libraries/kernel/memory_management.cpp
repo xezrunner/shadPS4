@@ -17,6 +17,11 @@ u64 PS4_SYSV_ABI sceKernelGetDirectMemorySize() {
     return SCE_KERNEL_MAIN_DMEM_SIZE;
 }
 
+s32 PS4_SYSV_ABI sceKernelCheckedReleaseDirectMemory(u64 start, size_t len) {
+    auto* memory = Core::Memory::Instance();
+    return memory->Free(start, len);
+}
+
 int PS4_SYSV_ABI sceKernelAllocateDirectMemory(s64 searchStart, s64 searchEnd, u64 len,
                                                u64 alignment, int memoryType, s64* physAddrOut) {
     if (searchStart < 0 || searchEnd <= searchStart) {
@@ -132,6 +137,11 @@ int PS4_SYSV_ABI sceKernelDirectMemoryQuery(u64 offset, int flags, OrbisQueryInf
     LOG_WARNING(Kernel_Vmm, "called");
     auto* memory = Core::Memory::Instance();
     return memory->DirectMemoryQuery(offset, flags == 1, query_info);
+}
+
+s32 PS4_SYSV_ABI sceKernelVirtualQuery(const void *addr, int flags, OrbisVirtualQueryInfo *info, size_t infoSize) {
+    auto* memory = Core::Memory::Instance();
+    return memory->VirtualQuery(std::bit_cast<VAddr>(addr), flags, info);
 }
 
 void PS4_SYSV_ABI _sceKernelRtldSetApplicationHeapAPI(void* func) {

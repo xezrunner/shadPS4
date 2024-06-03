@@ -1273,6 +1273,7 @@ int PS4_SYSV_ABI posix_pthread_rwlock_rdlock(ScePthreadRw* thread) {
     }
     return result;
 }
+
 int PS4_SYSV_ABI posix_pthread_rwlock_unlock(ScePthreadRw* thread) {
     int result = scePthreadRwlockUnlock(thread);
     if (result < 0) {
@@ -1280,6 +1281,7 @@ int PS4_SYSV_ABI posix_pthread_rwlock_unlock(ScePthreadRw* thread) {
     }
     return result;
 }
+
 void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("4+h9EzwKF4I", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetschedpolicy);
     LIB_FUNCTION("-Wreprtu0Qs", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetdetachstate);

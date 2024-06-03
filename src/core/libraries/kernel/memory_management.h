@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "common/bit_field.h"
 #include "common/types.h"
 
 constexpr u64 SCE_KERNEL_MAIN_DMEM_SIZE = 5376_MB; // ~ 6GB
@@ -36,7 +37,24 @@ struct OrbisQueryInfo {
     int memoryType;
 };
 
+struct OrbisVirtualQueryInfo {
+    uintptr_t start;
+    uintptr_t end;
+    size_t offset;
+    s32 protection;
+    s32 memory_type;
+    union {
+        BitField<0, 1, u32> is_flexible;
+        BitField<1, 1, u32> is_direct;
+        BitField<2, 1, u32> is_stack;
+        BitField<3, 1, u32> is_pooled;
+        BitField<4, 1, u32> is_commited;
+    };
+    std::array<char, 32> name;
+};
+
 u64 PS4_SYSV_ABI sceKernelGetDirectMemorySize();
+s32 PS4_SYSV_ABI sceKernelCheckedReleaseDirectMemory(u64 start, size_t len);
 int PS4_SYSV_ABI sceKernelAllocateDirectMemory(s64 searchStart, s64 searchEnd, u64 len,
                                                u64 alignment, int memoryType, s64* physAddrOut);
 s32 PS4_SYSV_ABI sceKernelAllocateMainDirectMemory(size_t len, size_t alignment, int memoryType,
@@ -51,6 +69,8 @@ int PS4_SYSV_ABI sceKernelQueryMemoryProtection(void* addr, void** start, void**
 
 int PS4_SYSV_ABI sceKernelDirectMemoryQuery(u64 offset, int flags, OrbisQueryInfo* query_info,
                                             size_t infoSize);
+
+s32 PS4_SYSV_ABI sceKernelVirtualQuery(const void *addr, int flags, OrbisVirtualQueryInfo *info, size_t infoSize);
 
 void PS4_SYSV_ABI _sceKernelRtldSetApplicationHeapAPI(void* func);
 

@@ -185,7 +185,7 @@ void PatchBufferInstruction(IR::Block& block, IR::Inst& inst, Info& info,
         .stride = buffer.GetStride(),
         .num_records = u32(buffer.num_records),
         .used_types = BufferDataType(inst),
-        .is_storage = true || IsBufferStore(inst),
+        .is_storage = IsBufferStore(inst),
     });
     const auto inst_info = inst.Flags<IR::BufferInstInfo>();
     IR::IREmitter ir{block, IR::Block::InstructionList::s_iterator_to(inst)};
@@ -205,8 +205,8 @@ void PatchBufferInstruction(IR::Block& block, IR::Inst& inst, Info& info,
     const u32 dword_offset = inst_info.inst_offset.Value() / sizeof(u32);
     IR::U32 address = ir.Imm32(dword_offset);
     if (inst_info.index_enable && inst_info.offset_enable) {
-        const IR::U32 offset{ir.CompositeExtract(inst.Arg(1), 0)};
-        const IR::U32 index{ir.CompositeExtract(inst.Arg(1), 1)};
+        const IR::U32 offset{ir.CompositeExtract(inst.Arg(1), 1)};
+        const IR::U32 index{ir.CompositeExtract(inst.Arg(1), 0)};
         address = ir.IAdd(ir.IMul(index, ir.Imm32(dword_stride)), address);
         address = ir.IAdd(address, ir.ShiftRightLogical(offset, ir.Imm32(2)));
     } else if (inst_info.index_enable) {

@@ -26,7 +26,7 @@ MemoryManager::~MemoryManager() = default;
 
 PAddr MemoryManager::Allocate(PAddr search_start, PAddr search_end, size_t size, u64 alignment,
                               int memory_type) {
-    PAddr free_addr = 0;
+    PAddr free_addr = search_start;
 
     // Iterate through allocated blocked and find the next free position
     for (const auto& block : allocations) {
@@ -45,7 +45,7 @@ PAddr MemoryManager::Allocate(PAddr search_start, PAddr search_end, size_t size,
     return free_addr;
 }
 
-void MemoryManager::Free(PAddr phys_addr, size_t size) {
+int MemoryManager::Free(PAddr phys_addr, size_t size) {
     const auto it = std::ranges::find_if(allocations, [&](const auto& alloc) {
         return alloc.base == phys_addr && alloc.size == size;
     });
@@ -53,6 +53,7 @@ void MemoryManager::Free(PAddr phys_addr, size_t size) {
 
     // Free the ranges.
     allocations.erase(it);
+    return ORBIS_OK;
 }
 
 int MemoryManager::MapMemory(void** out_addr, VAddr virtual_addr, size_t size, MemoryProt prot,
@@ -134,6 +135,27 @@ int MemoryManager::QueryProtection(VAddr addr, void** start, void** end, u32* pr
     *start = reinterpret_cast<void*>(vma.base);
     *end = reinterpret_cast<void*>(vma.base + vma.size);
     *prot = static_cast<u32>(vma.prot);
+    return ORBIS_OK;
+}
+
+int MemoryManager::VirtualQuery(VAddr addr, int flags, Libraries::Kernel::OrbisVirtualQueryInfo* info) {
+    auto it = FindVMA(addr);
+    while (it->second.type == VMAType::Free && flags == 1) {
+        it++;
+    }
+
+    const auto& vma = it->second;
+    info->start = vma.base;
+    info->end = vma.base + vma.size;
+    info->is_flexible.Assign(vma.type == VMAType::Flexible);
+    info->is_direct.Assign(vma.type == VMAType::Direct);
+    info->is_commited.Assign(vma.type != VMAType::Free);
+    if (vma.type == VMAType::Direct) {
+        const auto it = std::ranges::find(allocations, vma.base, &DirectMemoryArea::base);
+        ASSERT(it != allocations.end());
+        info->memory_type = it->memory_type;
+    }
+
     return ORBIS_OK;
 }
 

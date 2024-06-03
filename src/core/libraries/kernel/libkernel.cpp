@@ -18,6 +18,7 @@
 #include "core/libraries/kernel/time_management.h"
 #include "core/libraries/libs.h"
 #include "core/linker.h"
+#include "core/file_sys/fs.h"
 #include "core/memory.h"
 #ifdef _WIN64
 #include <io.h>
@@ -220,7 +221,28 @@ s64 PS4_SYSV_ABI ps4__read(int d, void* buf, u64 nbytes) {
         strlen(std::fgets(static_cast<char*>(buf), static_cast<int>(nbytes), stdin)));
 }
 
+size_t PS4_SYSV_ABI sceKernelPread(int fd, void *buf, size_t count, uint64_t offset) {
+    long unsigned int read_bytes = 0;
+
+    OVERLAPPED overlapped;
+    memset(&overlapped, 0, sizeof(OVERLAPPED));
+
+    overlapped.OffsetHigh = (uint32_t)((offset & 0xFFFFFFFF00000000LL) >> 32);
+    overlapped.Offset = (uint32_t)(offset & 0xFFFFFFFFLL);
+
+    auto* h = Common::Singleton<Core::FileSys::HandleTable>::Instance();
+    auto& file = h->GetFile(fd)->f;
+    file.Seek(offset);
+    return file.ReadRaw<u8>(buf, count);
+}
+
+int PS4_SYSV_ABI Unknown1() {
+    return 0x81100004;
+}
+
 void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
+    LIB_FUNCTION("fJgP+wqifno", "libSceDiscMap", 1, "libSceDiscMap", 1, 1, Unknown1);
+
     // obj
     LIB_OBJ("f7uOxY9mM1U", "libkernel", 1, "libkernel", 1, 1, &g_stack_chk_guard);
     // memory
@@ -232,9 +254,11 @@ void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("WFcfL2lzido", "libkernel", 1, "libkernel", 1, 1, sceKernelQueryMemoryProtection);
     LIB_FUNCTION("BHouLQzh0X0", "libkernel", 1, "libkernel", 1, 1, sceKernelDirectMemoryQuery);
     LIB_FUNCTION("MBuItvba6z8", "libkernel", 1, "libkernel", 1, 1, sceKernelReleaseDirectMemory);
+    LIB_FUNCTION("hwVSPCmp5tM", "libkernel", 1, "libkernel", 1, 1, sceKernelCheckedReleaseDirectMemory);
     LIB_FUNCTION("cQke9UuBQOk", "libkernel", 1, "libkernel", 1, 1, sceKernelMunmap);
     LIB_FUNCTION("mL8NDH86iQI", "libkernel", 1, "libkernel", 1, 1, sceKernelMapNamedFlexibleMemory);
     LIB_FUNCTION("IWIBBdTHit4", "libkernel", 1, "libkernel", 1, 1, sceKernelMapFlexibleMemory);
+    LIB_FUNCTION("rVjRvHJ0X6c", "libkernel", 1, "libkernel", 1, 1, sceKernelVirtualQuery);
     LIB_FUNCTION("p5EcQeEeJAE", "libkernel", 1, "libkernel", 1, 1, _sceKernelRtldSetApplicationHeapAPI);
 
     // equeue
@@ -254,6 +278,7 @@ void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("-o5uEDpN+oY", "libkernel", 1, "libkernel", 1, 1, sceKernelConvertUtcToLocaltime);
     LIB_FUNCTION("WB66evu8bsU", "libkernel", 1, "libkernel", 1, 1, sceKernelGetCompiledSdkVersion);
     LIB_FUNCTION("DRuBt2pvICk", "libkernel", 1, "libkernel", 1, 1, ps4__read);
+    LIB_FUNCTION("+r3rMFwItV4", "libkernel", 1, "libkernel", 1, 1, sceKernelPread);
 
     Libraries::Kernel::fileSystemSymbolsRegister(sym);
     Libraries::Kernel::timeSymbolsRegister(sym);

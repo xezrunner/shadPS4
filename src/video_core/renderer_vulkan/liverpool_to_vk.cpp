@@ -14,6 +14,8 @@ vk::StencilOp StencilOp(Liverpool::StencilFunc op) {
         return vk::StencilOp::eKeep;
     case Liverpool::StencilFunc::Zero:
         return vk::StencilOp::eZero;
+    case Liverpool::StencilFunc::ReplaceTest:
+        return vk::StencilOp::eReplace;
     case Liverpool::StencilFunc::AddClamp:
         return vk::StencilOp::eIncrementAndClamp;
     case Liverpool::StencilFunc::SubClamp:
