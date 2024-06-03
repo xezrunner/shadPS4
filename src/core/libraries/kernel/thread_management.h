@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <pthread.h>
+#include <semaphore.h>
 #include <sched.h>
 #include "common/types.h"
 

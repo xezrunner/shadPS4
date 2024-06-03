@@ -28,7 +28,7 @@ int PS4_SYSV_ABI sceKernelAllocateDirectMemory(s64 searchStart, s64 searchEnd, u
         LOG_ERROR(Kernel_Vmm, "Provided address range is invalid!");
         return SCE_KERNEL_ERROR_EINVAL;
     }
-    if ((alignment != 0 || Common::Is16KBAligned(alignment)) && !std::has_single_bit(alignment)) {
+    if (alignment != 0 && !Common::Is16KBAligned(alignment)) {
         LOG_ERROR(Kernel_Vmm, "Alignment value is invalid!");
         return SCE_KERNEL_ERROR_EINVAL;
     }

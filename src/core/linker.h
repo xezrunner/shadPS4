@@ -17,19 +17,6 @@ struct EntryParams {
     const char* argv[3];
 };
 
-union DtvEntry {
-    struct {
-        size_t counter;
-    };
-    void* pointer;
-};
-
-struct Tcb {
-    Tcb* tcb_self;
-    DtvEntry* tcb_dtv;
-    void* tcb_thread;
-};
-
 using HeapApiFunc = PS4_SYSV_ABI void*(*)(size_t);
 
 class Linker {
@@ -54,7 +41,7 @@ public:
 
     Module* LoadModule(const std::filesystem::path& elf_name);
 
-    void Relocate(u32 index, Module* module);
+    void Relocate(Module* module);
     void Resolve(const std::string& name, Loader::SymbolType type,
                  Module* module, Loader::SymbolRecord* return_info);
     void Execute();
@@ -64,9 +51,9 @@ private:
     const Module* FindExportedModule(const ModuleInfo& m, const LibraryInfo& l);
     void InitTls();
 
-    std::vector<DtvEntry> dtv_table;
     u32 dtv_generation_counter{1};
     size_t static_tls_size{};
+    size_t max_tls_index{};
     HeapApiFunc heap_api_func{};
     std::vector<std::unique_ptr<Module>> m_modules;
     Loader::SymbolsResolver m_hle_symbols{};

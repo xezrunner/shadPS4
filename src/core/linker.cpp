@@ -57,23 +57,23 @@ void Linker::Execute() {
     }
 
     // Calculate static TLS size.
-    static constexpr size_t StOff = 0x80; // TODO: What is this offset?
-    static_tls_size = std::ranges::fold_left(m_modules, StOff, [&](u32 size, auto& module) {
-        const size_t new_size = size + module->tls.image_size;
-        module->tls.distance_from_fs = new_size;
-        return new_size;
-    });
-
-    Common::SetCurrentThreadName("GAME_MainThread");
-    Libraries::Kernel::pthreadInitSelfMainThread();
-
-    // Init primary thread TLS.
-    InitTlsForThread(true);
+    for (const auto& module : m_modules) {
+        if (module->tls.image_size != 0) {
+            module->tls.modid = ++max_tls_index;
+        }
+        static_tls_size += module->tls.image_size;
+        module->tls.offset = static_tls_size;
+    }
 
     // Relocate all modules
-    for (u32 i = 1; const auto& m : m_modules) {
-        Relocate(i, m.get());
+    for (const auto& m : m_modules) {
+        Relocate(m.get());
     }
+
+    // Init primary thread.
+    Common::SetCurrentThreadName("GAME_MainThread");
+    Libraries::Kernel::pthreadInitSelfMainThread();
+    InitTlsForThread(true);
 
     // Start shared library modules
     for (auto& m : m_modules) {
@@ -113,7 +113,7 @@ Module* Linker::LoadModule(const std::filesystem::path& elf_name) {
     return m_modules.emplace_back(std::move(module)).get();
 }
 
-void Linker::Relocate(u32 index, Module* module) {
+void Linker::Relocate(Module* module) {
     module->ForEachRelocation([&](elf_relocation* rel, bool isJmpRel) {
         auto type = rel->GetType();
         auto symbol = rel->GetSymbol();
@@ -134,7 +134,7 @@ void Linker::Relocate(u32 index, Module* module) {
             rel_is_resolved = true;
             break;
         case R_X86_64_DTPMOD64:
-            rel_value = static_cast<uint64_t>(index);
+            rel_value = static_cast<u64>(module->tls.modid);
             rel_is_resolved = true;
             rel_sym_type = Loader::SymbolType::Tls;
             break;
@@ -254,10 +254,11 @@ void Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
 }
 
 void* Linker::TlsGetAddr(u64 module_index, u64 offset) {
+    DtvEntry* dtv_table = GetTcbBase()->tcb_dtv;
     ASSERT_MSG(dtv_table[0].counter == dtv_generation_counter,
                "Reallocation of DTV table is not supported");
 
-    void* module = dtv_table[module_index + 1].pointer;
+    void* module = (u8*)dtv_table[module_index + 1].pointer + offset;
     ASSERT_MSG(module, "DTV allocation is not supported");
     return module;
 }
@@ -286,26 +287,29 @@ void Linker::InitTlsForThread(bool is_primary) {
     }
 
     // Initialize allocated memory and allocate DTV table.
-    const u32 num_dtvs = m_modules.size() - 1;
+    const u32 num_dtvs = max_tls_index;
     std::memset(addr_out, 0, total_tls_size);
-    dtv_table.resize(num_dtvs + 2);
+    DtvEntry* dtv_table = new DtvEntry[num_dtvs + 2];
 
     // Initialize thread control block
     u8* addr = reinterpret_cast<u8*>(addr_out);
     Tcb* tcb = reinterpret_cast<Tcb*>(addr + static_tls_size);
     tcb->tcb_self = tcb;
-    tcb->tcb_dtv = dtv_table.data();
+    tcb->tcb_dtv = dtv_table;
 
     // Dtv[0] is the generation counter. libkernel puts their number into dtv[1] (why?)
     dtv_table[0].counter = dtv_generation_counter;
     dtv_table[1].counter = num_dtvs;
 
     // Copy init images to TLS thread blocks and map them to DTV slots.
-    for (u32 i = 2; const auto& module : m_modules) {
-        u8* dest = reinterpret_cast<u8*>(addr + static_tls_size - module->tls.distance_from_fs);
+    for (const auto& module : m_modules) {
+        if (module->tls.image_size == 0) {
+            continue;
+        }
+        u8* dest = reinterpret_cast<u8*>(addr + static_tls_size - module->tls.offset);
         const u8* src = reinterpret_cast<const u8*>(module->tls.image_virtual_addr);
         std::memcpy(dest, src, module->tls.init_image_size);
-        tcb->tcb_dtv[i++].pointer = dest;
+        tcb->tcb_dtv[module->tls.modid + 1].pointer = dest;
     }
 
     // Set pointer to FS base

@@ -160,8 +160,13 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
         inst_pool.ReleaseContents();
 
         // Recompile shader to IR.
-        const Shader::Info info = MakeShaderInfo(stage, pgm->user_data, regs);
-        programs[i] = Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info));
+        try {
+            const Shader::Info info = MakeShaderInfo(stage, pgm->user_data, regs);
+            programs[i] = Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info));
+        } catch (const Shader::Exception& e) {
+            LOG_ERROR(Render_Vulkan, "{}", e.what());
+            std::abort();
+        }
 
         // Compile IR to SPIR-V
         auto spv_code = Shader::Backend::SPIRV::EmitSPIRV(profile, programs[i], binding);

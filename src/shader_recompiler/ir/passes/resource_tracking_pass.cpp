@@ -157,16 +157,15 @@ SharpLocation TrackSharp(const IR::Inst* inst) {
     ASSERT_MSG(inst->GetOpcode() == IR::Opcode::ReadConst, "Sharp load not from constant memory");
 
     // Retrieve offset from base.
-    IR::Inst* addr = inst->Arg(0).InstRecursive();
-    u32 dword_offset = addr->Arg(1).U32();
-    addr = addr->Arg(0).InstRecursive();
-    ASSERT_MSG(addr->Arg(1).IsImmediate(), "Bindless not supported");
-    dword_offset += addr->Arg(1).U32() >> 2;
+    const u32 dword_offset = inst->Arg(1).U32();
+    const IR::Inst* spgpr_base = inst->Arg(0).InstRecursive();
 
-    // Retrieve SGPR that holds sbase
-    inst = addr->Arg(0).InstRecursive()->Arg(0).InstRecursive();
-    ASSERT_MSG(inst->GetOpcode() == IR::Opcode::GetUserData, "Nested resource loads not supported");
-    const IR::ScalarReg base = inst->Arg(0).ScalarReg();
+    // Retrieve SGPR pair that holds sbase
+    const IR::Inst* sbase0 = spgpr_base->Arg(0).InstRecursive();
+    const IR::Inst* sbase1 = spgpr_base->Arg(1).InstRecursive();
+    ASSERT_MSG(sbase0->GetOpcode() == IR::Opcode::GetUserData &&
+               sbase1->GetOpcode() == IR::Opcode::GetUserData, "Nested resource loads not supported");
+    const IR::ScalarReg base = sbase0->Arg(0).ScalarReg();
 
     // Return retrieved location.
     return SharpLocation{

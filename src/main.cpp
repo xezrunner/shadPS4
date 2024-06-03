@@ -87,6 +87,7 @@ int main(int argc, char* argv[]) {
             linker->LoadModule(entry.path().string().c_str());
         }
     }
+
     // Check if there is a libc.prx in sce_module folder
     bool found = false;
     if (Config::isLleLibc()) {
@@ -94,7 +95,8 @@ int main(int argc, char* argv[]) {
         if (std::filesystem::is_directory(sce_module_folder)) {
             for (const auto& entry : std::filesystem::directory_iterator(sce_module_folder)) {
                 if (entry.path().filename() == "libc.prx" ||
-                    entry.path().filename() == "libSceFios2.prx") {
+                    entry.path().filename() == "libSceFios2.prx" ||
+                    entry.path().filename() == "libSceNpToolkit2.prx") {
                     found = true;
                     LOG_INFO(Loader, "Loading {}", entry.path().string().c_str());
                     linker->LoadModule(entry.path().string().c_str());
@@ -105,6 +107,7 @@ int main(int argc, char* argv[]) {
     if (!found) {
         Libraries::LibC::libcSymbolsRegister(&linker->GetHLESymbols());
     }
+
     std::thread mainthread([linker]() { linker->Execute(); });
     Discord::RPC discordRPC;
     discordRPC.init();

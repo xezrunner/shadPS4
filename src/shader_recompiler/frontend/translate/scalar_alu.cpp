@@ -55,8 +55,20 @@ void Translator::S_ANDN2_B64(const GcnInst& inst) {
     const IR::U1 src0{get_src(inst.src[0])};
     const IR::U1 src1{get_src(inst.src[1])};
     const IR::U1 result{ir.LogicalAnd(src0, ir.LogicalNot(src1))};
-    SetDst(inst.dst[0], result);
     ir.SetScc(result);
+    switch (inst.dst[0].field) {
+    case OperandField::VccLo:
+        ir.SetVcc(result);
+        break;
+    case OperandField::ExecLo:
+        ir.SetExec(result);
+        break;
+    case OperandField::ScalarGPR:
+        ir.SetThreadBitScalarReg(IR::ScalarReg(inst.dst[0].code), result);
+        break;
+    default:
+        UNREACHABLE();
+    }
 }
 
 void Translator::S_AND_SAVEEXEC_B64(const GcnInst& inst) {
@@ -124,9 +136,17 @@ void Translator::S_OR_B64(bool negate, const GcnInst& inst) {
     if (negate) {
         result = ir.LogicalNot(result);
     }
-    ASSERT(inst.dst[0].field == OperandField::VccLo);
-    ir.SetVcc(result);
     ir.SetScc(result);
+    switch (inst.dst[0].field) {
+    case OperandField::VccLo:
+        ir.SetVcc(result);
+        break;
+    case OperandField::ScalarGPR:
+        ir.SetThreadBitScalarReg(IR::ScalarReg(inst.dst[0].code), result);
+        break;
+    default:
+        UNREACHABLE();
+    }
 }
 
 void Translator::S_AND_B64(const GcnInst& inst) {
@@ -145,9 +165,17 @@ void Translator::S_AND_B64(const GcnInst& inst) {
     const IR::U1 src0{get_src(inst.src[0])};
     const IR::U1 src1{get_src(inst.src[1])};
     const IR::U1 result = ir.LogicalAnd(src0, src1);
-    ASSERT(inst.dst[0].field == OperandField::VccLo);
-    ir.SetVcc(result);
     ir.SetScc(result);
+    switch (inst.dst[0].field) {
+    case OperandField::VccLo:
+        ir.SetVcc(result);
+        break;
+    case OperandField::ScalarGPR:
+        ir.SetThreadBitScalarReg(IR::ScalarReg(inst.dst[0].code), result);
+        break;
+    default:
+        UNREACHABLE();
+    }
 }
 
 void Translator::S_ADD_I32(const GcnInst& inst) {
@@ -177,6 +205,36 @@ void Translator::S_CSELECT_B32(const GcnInst& inst) {
     const IR::U32 src0{GetSrc(inst.src[0])};
     const IR::U32 src1{GetSrc(inst.src[1])};
     SetDst(inst.dst[0], IR::U32{ir.Select(ir.GetScc(), src0, src1)});
+}
+
+void Translator::S_CSELECT_B64(const GcnInst& inst) {
+    const auto get_src = [&](const InstOperand& operand) {
+        switch (operand.field) {
+        case OperandField::VccLo:
+            return ir.GetVcc();
+        case OperandField::ExecLo:
+            return ir.GetExec();
+        case OperandField::ScalarGPR:
+            return ir.GetThreadBitScalarReg(IR::ScalarReg(operand.code));
+        case OperandField::ConstZero:
+            return ir.Imm1(false);
+        default:
+            UNREACHABLE();
+        }
+    };
+    const IR::U1 src0{get_src(inst.src[0])};
+    const IR::U1 src1{get_src(inst.src[1])};
+    const IR::U1 result{ir.Select(ir.GetScc(), src0, src1)};
+    switch (inst.dst[0].field) {
+    case OperandField::VccLo:
+        ir.SetVcc(result);
+        break;
+    case OperandField::ScalarGPR:
+        ir.SetThreadBitScalarReg(IR::ScalarReg(inst.dst[0].code), result);
+        break;
+    default:
+        UNREACHABLE();
+    }
 }
 
 void Translator::S_BFE_U32(const GcnInst& inst) {

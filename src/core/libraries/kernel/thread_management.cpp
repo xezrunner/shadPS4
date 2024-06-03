@@ -10,7 +10,6 @@
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/thread_management.h"
 #include "core/libraries/libs.h"
-#include "core/tls.h"
 #include "core/linker.h"
 #ifdef _WIN64
 #include <windows.h>
@@ -516,7 +515,7 @@ int PS4_SYSV_ABI scePthreadMutexLock(ScePthreadMutex* mutex) {
 
     int result = pthread_mutex_lock(&(*mutex)->pth_mutex);
     if (result != 0) {
-        LOG_INFO(Kernel_Pthread, "name={}, result={}", (*mutex)->name, result);
+        //LOG_INFO(Kernel_Pthread, "name={}, result={}", (*mutex)->name, result);
     }
     switch (result) {
     case 0:
@@ -539,7 +538,7 @@ int PS4_SYSV_ABI scePthreadMutexUnlock(ScePthreadMutex* mutex) {
 
     int result = pthread_mutex_unlock(&(*mutex)->pth_mutex);
     if (result != 0) {
-        LOG_INFO(Kernel_Pthread, "name={}, result={}", (*mutex)->name, result);
+        //LOG_INFO(Kernel_Pthread, "name={}, result={}", (*mutex)->name, result);
     }
     switch (result) {
     case 0:
@@ -1122,6 +1121,34 @@ void* PS4_SYSV_ABI __tls_get_addr(TlsIndex* index) {
     return linker->TlsGetAddr(index->ti_module, index->ti_offset);
 }
 
+int PS4_SYSV_ABI posix_sem_init(sem_t *sem, int pshared, unsigned int value) {
+    return sem_init(sem, pshared, value);
+}
+
+int PS4_SYSV_ABI posix_sem_wait(sem_t *sem) {
+    return sem_wait(sem);
+}
+
+int PS4_SYSV_ABI posix_sem_post(sem_t *sem) {
+    return sem_post(sem);
+}
+
+int PS4_SYSV_ABI posix_pthread_mutex_destroy(ScePthreadMutex* mutex) {
+    // LOG_INFO(Kernel_Pthread, "posix pthread_mutex_init redirect to scePthreadMutexInit");
+    int result = scePthreadMutexDestroy(mutex);
+    if (result < 0) {
+        int rt = result > SCE_KERNEL_ERROR_UNKNOWN && result <= SCE_KERNEL_ERROR_ESTOP
+                     ? result + -SCE_KERNEL_ERROR_UNKNOWN
+                     : POSIX_EOTHER;
+        return rt;
+    }
+    return result;
+}
+
+int PS4_SYSV_ABI posix_pthread_join(ScePthread thread, void** value_ptr) {
+    return pthread_join(thread->pth, value_ptr);
+}
+
 void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("4+h9EzwKF4I", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetschedpolicy);
     LIB_FUNCTION("-Wreprtu0Qs", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetdetachstate);
@@ -1173,9 +1200,14 @@ void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("dQHWEsJtoE4", "libScePosix", 1, "libkernel", 1, 1, pthread_mutexattr_init);
     LIB_FUNCTION("mDmgMOGVUqg", "libScePosix", 1, "libkernel", 1, 1, pthread_mutexattr_settype);
     LIB_FUNCTION("ttHNfU+qDBU", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_init);
+    LIB_FUNCTION("ltCfaGr2JGE", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_destroy);
     LIB_FUNCTION("7H0iTOciTLo", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_lock);
     LIB_FUNCTION("2Z+PpY6CaJg", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_mutex_unlock);
     LIB_FUNCTION("mkx2fVhNMsg", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_cond_broadcast);
+    LIB_FUNCTION("h9CcP3J0oVM", "libScePosix", 1, "libkernel", 1, 1, posix_pthread_join);
+    LIB_FUNCTION("pDuPEf3m4fI", "libScePosix", 1, "libkernel", 1, 1, posix_sem_init);
+    LIB_FUNCTION("YCV5dGGBcCo", "libScePosix", 1, "libkernel", 1, 1, posix_sem_wait);
+    LIB_FUNCTION("IKP8typ0QUk", "libScePosix", 1, "libkernel", 1, 1, posix_sem_post);
 
     LIB_FUNCTION("QBi7HCK03hw", "libkernel", 1, "libkernel", 1, 1, sceKernelClockGettime);
     LIB_FUNCTION("lLMT9vJAck0", "libkernel", 1, "libkernel", 1, 1, clock_gettime);

@@ -49,6 +49,10 @@ void SetTcbBase(void* image_address) {
     ASSERT(result != 0);
 }
 
+Tcb* GetTcbBase() {
+    return reinterpret_cast<Tcb*>(TlsGetValue(slot));
+}
+
 void PatchTLS(u64 segment_addr, u64 segment_size, Xbyak::CodeGenerator& c) {
     using namespace Xbyak::util;
 

@@ -46,6 +46,7 @@ public:
     void S_AND_B32(const GcnInst& inst);
     void S_LSHR_B32(const GcnInst& inst);
     void S_CSELECT_B32(const GcnInst& inst);
+    void S_CSELECT_B64(const GcnInst& inst);
     void S_BFE_U32(const GcnInst& inst);
 
     // Scalar Memory

@@ -66,7 +66,7 @@ int SDLAudio::AudioOutOpen(int type, u32 samples_num, u32 freq,
                 port.sample_size = 4;
                 break;
             default:
-                UNREACHABLE_MSG("Unknown format");
+                UNREACHABLE_MSG("Unknown format {}", u32(format));
             }
 
             for (int i = 0; i < port.channels_num; i++) {

@@ -47,10 +47,11 @@ struct LibraryInfo {
 
 struct ThreadLocalImage {
     u64 align;
+    u64 image_size;
+    u64 offset;
+    u32 modid;
     VAddr image_virtual_addr;
     u64 init_image_size;
-    u64 image_size;
-    u64 distance_from_fs;
 };
 
 struct DynamicModuleInfo {
@@ -166,7 +167,7 @@ public:
     std::vector<u8> m_dynamic_data;
     Loader::SymbolsResolver export_sym;
     Loader::SymbolsResolver import_sym;
-    ThreadLocalImage tls;
+    ThreadLocalImage tls{};
 };
 
 } // namespace Core
