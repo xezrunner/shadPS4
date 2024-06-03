@@ -54,7 +54,7 @@ public:
 
     Module* LoadModule(const std::filesystem::path& elf_name);
 
-    void Relocate(Module* module);
+    void Relocate(u32 index, Module* module);
     void Resolve(const std::string& name, Loader::SymbolType type,
                  Module* module, Loader::SymbolRecord* return_info);
     void Execute();

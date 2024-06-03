@@ -321,6 +321,10 @@ void TextureCache::UntrackImage(Image& image, ImageId image_id) {
 void TextureCache::UpdatePagesCachedCount(VAddr addr, u64 size, s32 delta) {
     std::scoped_lock lk{mutex};
     const u64 num_pages = ((addr + size - 1) >> PageShift) - (addr >> PageShift) + 1;
+    if (num_pages == 0) {
+        return;
+    }
+
     const u64 page_start = addr >> PageShift;
     const u64 page_end = page_start + num_pages;
 

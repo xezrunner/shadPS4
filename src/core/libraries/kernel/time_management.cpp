@@ -39,44 +39,66 @@ u64 PS4_SYSV_ABI sceKernelReadTsc() {
 
 int PS4_SYSV_ABI sceKernelGettimeofday(SceKernelTimeval* tp) {}
 
-#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
-#define DELTA_EPOCH_IN_MICROSECS 11644473600000000Ui64
-#else
-#define DELTA_EPOCH_IN_MICROSECS 11644473600000000ULL
-#endif
+#define FILETIME_1970 116444736000000000ull /* seconds between 1/1/1601 and 1/1/1970 */
+#define HECTONANOSEC_PER_SEC 10000000ull
 
-struct timezone {
-    int tz_minuteswest; /* minutes W of Greenwich */
-    int tz_dsttime;     /* type of dst correction */
-};
+int PS4_SYSV_ABI getntptimeofday(struct timespec *tp, struct timezone *z) {
+    int res = 0;
+    union {
+        unsigned long long ns100; /*time since 1 Jan 1601 in 100ns units */
+        FILETIME ft;
+    }  _now;
+    TIME_ZONE_INFORMATION  TimeZoneInformation;
+    DWORD tzi;
 
-struct timeval {
-    long tv_sec;
-    long tv_usec;
-};
+    if (z != NULL)
+    {
+        if ((tzi = GetTimeZoneInformation(&TimeZoneInformation)) != TIME_ZONE_ID_INVALID) {
+            z->tz_minuteswest = TimeZoneInformation.Bias;
+            if (tzi == TIME_ZONE_ID_DAYLIGHT)
+                z->tz_dsttime = 1;
+            else
+                z->tz_dsttime = 0;
+        }
+        else
+        {
+            z->tz_minuteswest = 0;
+            z->tz_dsttime = 0;
+        }
+    }
 
-/* FILETIME of Jan 1 1970 00:00:00, the PostgreSQL epoch */
-static const unsigned __int64 epoch = 116444736000000000ULL;
+    if (tp != NULL) {
+        typedef void (WINAPI * GetSystemTimeAsFileTime_t)(LPFILETIME);
+        static GetSystemTimeAsFileTime_t GetSystemTimeAsFileTime_p /* = 0 */;
 
-/*
- * FILETIME represents the number of 100-nanosecond intervals since
- * January 1, 1601 (UTC).
- */
-#define FILETIME_UNITS_PER_SEC 10000000L
-#define FILETIME_UNITS_PER_USEC 10
+        /* Set function pointer during first call */
+        GetSystemTimeAsFileTime_t get_time =
+            __atomic_load_n (&GetSystemTimeAsFileTime_p, __ATOMIC_RELAXED);
+        if (get_time == NULL) {
+            /* Use GetSystemTimePreciseAsFileTime() if available (Windows 8 or later) */
+            get_time = (GetSystemTimeAsFileTime_t)(intptr_t) GetProcAddress (
+                GetModuleHandle ("kernel32.dll"),
+                "GetSystemTimePreciseAsFileTime"); /* <1us precision on Windows 10 */
+            if (get_time == NULL)
+                get_time = GetSystemTimeAsFileTime; /* >15ms precision on Windows 10 */
+            __atomic_store_n (&GetSystemTimeAsFileTime_p, get_time, __ATOMIC_RELAXED);
+        }
 
-int PS4_SYSV_ABI gettimeofday(struct timeval* tp, struct timezone* tzp) {
-    FILETIME file_time;
-    ULARGE_INTEGER ularge;
+        get_time (&_now.ft);	/* 100 nano-seconds since 1-1-1601 */
+        _now.ns100 -= FILETIME_1970;	/* 100 nano-seconds since 1-1-1970 */
+        tp->tv_sec = _now.ns100 / HECTONANOSEC_PER_SEC;	/* seconds since 1-1-1970 */
+        tp->tv_nsec = (long) (_now.ns100 % HECTONANOSEC_PER_SEC) * 100; /* nanoseconds */
+    }
+    return res;
+}
 
-    GetSystemTimePreciseAsFileTime(&file_time);
-    ularge.LowPart = file_time.dwLowDateTime;
-    ularge.HighPart = file_time.dwHighDateTime;
+int PS4_SYSV_ABI gettimeofday(struct timeval *p, struct timezone *z) {
+    struct timespec tp;
 
-    tp->tv_sec = (long)((ularge.QuadPart - epoch) / FILETIME_UNITS_PER_SEC);
-    tp->tv_usec =
-        (long)(((ularge.QuadPart - epoch) % FILETIME_UNITS_PER_SEC) / FILETIME_UNITS_PER_USEC);
-
+    if (getntptimeofday (&tp, z))
+        return -1;
+    p->tv_sec=tp.tv_sec;
+    p->tv_usec=(tp.tv_nsec/1000);
     return 0;
 }
 

@@ -71,8 +71,8 @@ void Linker::Execute() {
     InitTlsForThread(true);
 
     // Relocate all modules
-    for (const auto& m : m_modules) {
-        Relocate(m.get());
+    for (u32 i = 1; const auto& m : m_modules) {
+        Relocate(i, m.get());
     }
 
     // Start shared library modules
@@ -113,7 +113,7 @@ Module* Linker::LoadModule(const std::filesystem::path& elf_name) {
     return m_modules.emplace_back(std::move(module)).get();
 }
 
-void Linker::Relocate(Module* module) {
+void Linker::Relocate(u32 index, Module* module) {
     module->ForEachRelocation([&](elf_relocation* rel, bool isJmpRel) {
         auto type = rel->GetType();
         auto symbol = rel->GetSymbol();
@@ -134,7 +134,7 @@ void Linker::Relocate(Module* module) {
             rel_is_resolved = true;
             break;
         case R_X86_64_DTPMOD64:
-            rel_value = reinterpret_cast<uint64_t>(module);
+            rel_value = static_cast<uint64_t>(index);
             rel_is_resolved = true;
             rel_sym_type = Loader::SymbolType::Tls;
             break;
@@ -257,7 +257,7 @@ void* Linker::TlsGetAddr(u64 module_index, u64 offset) {
     ASSERT_MSG(dtv_table[0].counter == dtv_generation_counter,
                "Reallocation of DTV table is not supported");
 
-    void* module = dtv_table[module_index - 1].pointer;
+    void* module = dtv_table[module_index + 1].pointer;
     ASSERT_MSG(module, "DTV allocation is not supported");
     return module;
 }

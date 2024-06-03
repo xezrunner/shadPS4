@@ -4,6 +4,7 @@
 #include <chrono>
 #include <thread>
 #include "common/assert.h"
+#include "common/error.h"
 #include "common/logging/log.h"
 #include "common/singleton.h"
 #include "core/libraries/error_codes.h"
@@ -165,7 +166,27 @@ s64 PS4_SYSV_ABI ps4__write(int d, const void* buf, std::size_t nbytes) {
 
 int PS4_SYSV_ABI sceKernelConvertUtcToLocaltime(time_t time, time_t* local_time,
                                                 struct OrbisTimesec* st, unsigned long* dst_sec) {
+    return ORBIS_OK;
     LOG_TRACE(Kernel, "Called");
+    timeval val;
+    timezone tmz;
+    gettimeofday(&val, &tmz);
+
+    if (local_time) {
+        *local_time = (tmz.tz_minuteswest + tmz.tz_dsttime) * 60 + time;
+    }
+
+    if (st) {
+        st->t = time;
+        st->dst_sec = tmz.tz_dsttime * 60;
+        st->west_sec = tmz.tz_minuteswest * 60;
+    }
+
+    if (dst_sec) {
+        *dst_sec = tmz.tz_dsttime * 60;
+    }
+    return ORBIS_OK;
+
     const auto* time_zone = std::chrono::current_zone();
     auto info = time_zone->get_info(std::chrono::system_clock::now());
 
