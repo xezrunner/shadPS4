@@ -240,7 +240,7 @@ MemoryManager::VMAHandle MemoryManager::MergeAdjacent(VMAHandle iter) {
 }
 
 void MemoryManager::MapVulkanMemory(VAddr addr, size_t size) {
-    return;
+    //return;
     const vk::Device device = instance->GetDevice();
     const auto memory_props = instance->GetPhysicalDevice().getMemoryProperties();
     void* host_pointer = reinterpret_cast<void*>(addr);
@@ -312,7 +312,7 @@ void MemoryManager::MapVulkanMemory(VAddr addr, size_t size) {
 }
 
 void MemoryManager::UnmapVulkanMemory(VAddr addr, size_t size) {
-    return;
+    //return;
     const auto it = mapped_memories.find(addr);
     ASSERT(it != mapped_memories.end() && it->second.buffer_size == size);
     mapped_memories.erase(it);

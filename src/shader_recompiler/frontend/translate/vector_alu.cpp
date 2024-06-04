@@ -367,4 +367,9 @@ void Translator::V_MAD_U32_U24(const GcnInst& inst) {
     V_MAD_I32_I24(inst);
 }
 
+void Translator::V_RNDNE_F32(const GcnInst& inst) {
+    const IR::F32 src0{GetSrc(inst.src[0], true)};
+    SetDst(inst.dst[0], ir.FPRoundEven(src0));
+}
+
 } // namespace Shader::Gcn

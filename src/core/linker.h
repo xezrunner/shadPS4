@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <vector>
 #include "core/module.h"
 
@@ -29,7 +30,11 @@ public:
     }
 
     VAddr GetProcParam() const {
-        return main_proc_param_addr;
+        return m_modules[0]->GetProcParam();
+    }
+
+    Module* GetModule(s32 index) const {
+        return m_modules.at(index).get();
     }
 
     void SetHeapApiFunc(void* func) {
@@ -39,7 +44,7 @@ public:
     void* TlsGetAddr(u64 module_index, u64 offset);
     void InitTlsForThread(bool is_primary = false);
 
-    Module* LoadModule(const std::filesystem::path& elf_name);
+    s32 LoadModule(const std::filesystem::path& elf_name);
 
     void Relocate(Module* module);
     void Resolve(const std::string& name, Loader::SymbolType type,
@@ -49,15 +54,14 @@ public:
 
 private:
     const Module* FindExportedModule(const ModuleInfo& m, const LibraryInfo& l);
-    void InitTls();
 
+    std::mutex mutex;
     u32 dtv_generation_counter{1};
     size_t static_tls_size{};
     size_t max_tls_index{};
     HeapApiFunc heap_api_func{};
     std::vector<std::unique_ptr<Module>> m_modules;
     Loader::SymbolsResolver m_hle_symbols{};
-    VAddr main_proc_param_addr{};
 };
 
 } // namespace Core

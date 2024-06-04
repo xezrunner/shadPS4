@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <span>
 #include "common/types.h"
 
 namespace Core::Loader {
@@ -20,6 +21,7 @@ enum class SymbolType {
 
 struct SymbolRecord {
     std::string name;
+    std::string nid_name;
     u64 virtual_address;
 };
 
@@ -41,6 +43,10 @@ public:
 
     void AddSymbol(const SymbolResolver& s, u64 virtual_addr);
     const SymbolRecord* FindSymbol(const SymbolResolver& s) const;
+
+    std::span<const SymbolRecord> GetSymbols() const {
+        return m_symbols;
+    }
 
     size_t GetSize() const noexcept {
         return m_symbols.size();

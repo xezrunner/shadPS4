@@ -371,6 +371,9 @@ void Translate(IR::Block* block, std::span<const GcnInst> inst_list, Info& info)
         case Opcode::S_CMP_EQ_U32:
             translator.S_CMP(ConditionOp::EQ, false, inst);
             break;
+        case Opcode::S_LSHL_B32:
+            translator.S_LSHL_B32(inst);
+            break;
         case Opcode::V_CNDMASK_B32:
             translator.V_CNDMASK_B32(inst);
             break;
@@ -526,6 +529,9 @@ void Translate(IR::Block* block, std::span<const GcnInst> inst_list, Info& info)
             break;
         case Opcode::S_BFE_U32:
             translator.S_BFE_U32(inst);
+            break;
+        case Opcode::V_RNDNE_F32:
+            translator.V_RNDNE_F32(inst);
             break;
         case Opcode::S_NOP:
         case Opcode::S_CBRANCH_EXECZ:

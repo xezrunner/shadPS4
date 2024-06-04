@@ -119,8 +119,18 @@ public:
         return elf.IsSharedLib();
     }
 
-    VAddr GetProcParam() const noexcept {
-        return proc_param_virtual_addr;
+    void* FindByName(std::string_view name) {
+        const auto symbols = export_sym.GetSymbols();
+        const auto it = std::ranges::find(symbols, name, &Loader::SymbolRecord::nid_name);
+        if (it != symbols.end()) {
+            return reinterpret_cast<void*>(it->virtual_address);
+        }
+        return nullptr;
+    }
+
+    template <typename T = VAddr>
+    const T GetProcParam() const noexcept {
+        return reinterpret_cast<T>(proc_param_virtual_addr);
     }
 
     std::span<const ModuleInfo> GetImportModules() const {

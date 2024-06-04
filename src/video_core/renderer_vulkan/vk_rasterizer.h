@@ -29,12 +29,12 @@ public:
                         VideoCore::TextureCache& texture_cache, AmdGpu::Liverpool* liverpool);
     ~Rasterizer();
 
-    void Draw(bool is_indexed);
+    void Draw(bool is_indexed, u32 index_offset = 0);
 
     void DispatchDirect();
 
 private:
-    u32 SetupIndexBuffer(bool& is_indexed);
+    u32 SetupIndexBuffer(bool& is_indexed, u32 index_offset);
     void MapMemory(VAddr addr, size_t size);
 
     void UpdateDynamicState(const GraphicsPipeline& pipeline);
@@ -49,7 +49,6 @@ private:
     Core::MemoryManager* memory;
     PipelineCache pipeline_cache;
     StreamBuffer vertex_index_buffer;
-    bool compute_done{};
 };
 
 } // namespace Vulkan

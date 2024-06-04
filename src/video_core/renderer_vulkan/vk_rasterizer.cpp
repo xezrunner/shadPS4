@@ -32,16 +32,15 @@ Rasterizer::Rasterizer(const Instance& instance_, Scheduler& scheduler_,
 
 Rasterizer::~Rasterizer() = default;
 
-void Rasterizer::Draw(bool is_indexed) {
+void Rasterizer::Draw(bool is_indexed, u32 index_offset) {
     const auto cmdbuf = scheduler.CommandBuffer();
     const auto& regs = liverpool->regs;
-    const u32 num_indices = SetupIndexBuffer(is_indexed);
+    const u32 num_indices = SetupIndexBuffer(is_indexed, index_offset);
     const GraphicsPipeline* pipeline = pipeline_cache.GetGraphicsPipeline();
     pipeline->BindResources(memory, vertex_index_buffer, texture_cache);
 
     boost::container::static_vector<vk::RenderingAttachmentInfo, Liverpool::NumColorBuffers>
         color_attachments{};
-    const std::array color = {0.5f, 0.5f, 0.5f, 1.f};
     for (auto col_buf_id = 0u; col_buf_id < Liverpool::NumColorBuffers; ++col_buf_id) {
         const auto& col_buf = regs.color_buffers[col_buf_id];
         if (!col_buf) {
@@ -54,12 +53,10 @@ void Rasterizer::Draw(bool is_indexed) {
         color_attachments.push_back({
             .imageView = *image_view.image_view,
             .imageLayout = vk::ImageLayout::eGeneral,
-            .loadOp = compute_done ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad,
+            .loadOp = vk::AttachmentLoadOp::eLoad,
             .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = vk::ClearValue{color},
         });
     }
-    compute_done = false;
 
     // TODO: Don't restart renderpass every draw
     const auto& scissor = regs.screen_scissor;
@@ -88,18 +85,16 @@ void Rasterizer::Draw(bool is_indexed) {
 }
 
 void Rasterizer::DispatchDirect() {
-    compute_done = true;
-    return;
     const auto cmdbuf = scheduler.CommandBuffer();
     const auto& cs_program = liverpool->regs.cs_program;
     const ComputePipeline* pipeline = pipeline_cache.GetComputePipeline();
-    pipeline->BindResources(memory, texture_cache);
+    pipeline->BindResources(memory, vertex_index_buffer, texture_cache);
 
     cmdbuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline->Handle());
     cmdbuf.dispatch(cs_program.dim_x, cs_program.dim_y, cs_program.dim_z);
 }
 
-u32 Rasterizer::SetupIndexBuffer(bool& is_indexed) {
+u32 Rasterizer::SetupIndexBuffer(bool& is_indexed, u32 index_offset) {
     // Emulate QuadList primitive type with CPU made index buffer.
     const auto& regs = liverpool->regs;
     if (liverpool->regs.primitive_type == Liverpool::PrimitiveType::QuadList) {
@@ -135,7 +130,7 @@ u32 Rasterizer::SetupIndexBuffer(bool& is_indexed) {
 
     // Bind index buffer.
     const auto cmdbuf = scheduler.CommandBuffer();
-    cmdbuf.bindIndexBuffer(vertex_index_buffer.Handle(), offset, index_type);
+    cmdbuf.bindIndexBuffer(vertex_index_buffer.Handle(), offset + index_offset * index_size, index_type);
     return regs.num_indices;
 }
 

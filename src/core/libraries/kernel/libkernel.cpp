@@ -236,13 +236,42 @@ size_t PS4_SYSV_ABI sceKernelPread(int fd, void *buf, size_t count, uint64_t off
     return file.ReadRaw<u8>(buf, count);
 }
 
-int PS4_SYSV_ABI Unknown1() {
-    return 0x81100004;
+s32 PS4_SYSV_ABI sceKernelLoadStartModule(const char *moduleFileName, size_t args, const void *argp,
+                                          u32 flags, const void *pOpt, int *pRes) {
+    LOG_INFO(Lib_Kernel, "called filename = {}, args = {}", moduleFileName, args);
+
+    if (flags != 0) {
+        return 0x80020016;
+    }
+
+    auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
+    const auto path = mnt->GetHostFile(moduleFileName);
+
+    // Load PRX module.
+    auto* linker = Common::Singleton<Core::Linker>::Instance();
+    u32 handle = linker->LoadModule(path);
+    auto* module = linker->GetModule(handle);
+    linker->Relocate(module);
+
+    // Retrieve and verify proc param according to libkernel.
+    const u64* param = module->GetProcParam<u64*>();
+    ASSERT_MSG(!param || param[0] >= 0x18, "Invalid module param size: {}", param[0]);
+    module->Start(args, argp, 0);
+
+    return handle;
+}
+
+s32 PS4_SYSV_ABI sceKernelDlsym(s32 handle, const char *symbol, void **addrp) {
+    auto* linker = Common::Singleton<Core::Linker>::Instance();
+    auto* module = linker->GetModule(handle);
+    *addrp = module->FindByName(symbol);
+    if (*addrp == nullptr) {
+        return 0x80020003;
+    }
+    return ORBIS_OK;
 }
 
 void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
-    LIB_FUNCTION("fJgP+wqifno", "libSceDiscMap", 1, "libSceDiscMap", 1, 1, Unknown1);
-
     // obj
     LIB_OBJ("f7uOxY9mM1U", "libkernel", 1, "libkernel", 1, 1, &g_stack_chk_guard);
     // memory
@@ -260,6 +289,8 @@ void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("IWIBBdTHit4", "libkernel", 1, "libkernel", 1, 1, sceKernelMapFlexibleMemory);
     LIB_FUNCTION("rVjRvHJ0X6c", "libkernel", 1, "libkernel", 1, 1, sceKernelVirtualQuery);
     LIB_FUNCTION("p5EcQeEeJAE", "libkernel", 1, "libkernel", 1, 1, _sceKernelRtldSetApplicationHeapAPI);
+    LIB_FUNCTION("wzvqT4UqKX8", "libkernel", 1, "libkernel", 1, 1, sceKernelLoadStartModule);
+    LIB_FUNCTION("LwG8g3niqwA", "libkernel", 1, "libkernel", 1, 1, sceKernelDlsym);
 
     // equeue
     LIB_FUNCTION("D0OdFMjp46I", "libkernel", 1, "libkernel", 1, 1, sceKernelCreateEqueue);

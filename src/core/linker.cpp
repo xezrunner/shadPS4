@@ -94,23 +94,22 @@ void Linker::Execute() {
     }
 }
 
-Module* Linker::LoadModule(const std::filesystem::path& elf_name) {
+s32 Linker::LoadModule(const std::filesystem::path& elf_name) {
+    std::scoped_lock lk{mutex};
+
     if (!std::filesystem::exists(elf_name)) {
         LOG_ERROR(Core_Linker, "Provided file {} does not exist", elf_name.string());
-        return nullptr;
+        return -1;
     }
 
     auto module = std::make_unique<Module>(elf_name);
     if (!module->IsValid()) {
         LOG_ERROR(Core_Linker, "Provided file {} is not valid ELF file", elf_name.string());
-        return nullptr;
+        return -1;
     }
 
-    if (!module->IsSharedLib()) {
-        main_proc_param_addr = module->GetProcParam();
-    }
-
-    return m_modules.emplace_back(std::move(module)).get();
+    m_modules.emplace_back(std::move(module));
+    return m_modules.size() - 1;
 }
 
 void Linker::Relocate(Module* module) {

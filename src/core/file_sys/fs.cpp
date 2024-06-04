@@ -52,7 +52,6 @@ std::string MntPoints::GetHostFile(const std::string& guest_file) {
         if (find == 0) {
             std::string npath = guest_file.substr(pair.guest_path.size(), guest_file.size() - 1);
             std::replace(pair.host_path.begin(), pair.host_path.end(), '\\', '/');
-            fmt::print("GetHostFile: {}\n", pair.host_path + npath);
             return pair.host_path + npath;
         }
     }
