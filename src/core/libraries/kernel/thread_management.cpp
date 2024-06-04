@@ -1168,7 +1168,7 @@ int PS4_SYSV_ABI scePthreadRwlockInit(ScePthreadRw* thread, ScePthreadRwAttr* at
     }
 
     int result = pthread_rwlock_init(&(*thread)->pth_rwlock, &(*attr)->attr_rwlock);
-    LOG_INFO(Kernel_Pthread, "scePthreadRwlockInit: result = {}", result);
+    //LOG_INFO(Kernel_Pthread, "scePthreadRwlockInit: result = {}", result);
 
     switch (result) {
     case 0:
@@ -1253,7 +1253,7 @@ int PS4_SYSV_ABI scePthreadRwlockattrInit(ScePthreadRwAttr* attr) {
     *attr = new PthreadRwLockAttrInernal{};
 
     int result = pthread_rwlockattr_init(&(*attr)->attr_rwlock);
-    LOG_INFO(Kernel_Pthread, "scePthreadRwlockattrInit: result = {}", result);
+    //LOG_INFO(Kernel_Pthread, "scePthreadRwlockattrInit: result = {}", result);
 
     switch (result) {
     case 0:
