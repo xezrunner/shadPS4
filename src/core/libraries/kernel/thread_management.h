@@ -44,6 +44,10 @@ struct SceKernelTimespec {
     int64_t tv_nsec;
 };
 
+constexpr int ORBIS_KERNEL_PRIO_FIFO_DEFAULT = 700;
+constexpr int ORBIS_KERNEL_PRIO_FIFO_HIGHEST = 256;
+constexpr int ORBIS_KERNEL_PRIO_FIFO_LOWEST = 767;
+
 struct PthreadInternal {
     u8 reserved[4096];
     std::string name;
@@ -178,6 +182,7 @@ int PS4_SYSV_ABI scePthreadMutexattrSettype(ScePthreadMutexattr* attr, int type)
 int PS4_SYSV_ABI scePthreadMutexattrSetprotocol(ScePthreadMutexattr* attr, int protocol);
 int PS4_SYSV_ABI scePthreadMutexLock(ScePthreadMutex* mutex);
 int PS4_SYSV_ABI scePthreadMutexUnlock(ScePthreadMutex* mutex);
+int PS4_SYSV_ABI scePthreadMutexTrylock(ScePthreadMutex* mutex);
 /****
  * Cond calls
  */
@@ -185,6 +190,7 @@ int PS4_SYSV_ABI scePthreadCondInit(ScePthreadCond* cond, const ScePthreadCondat
                                     const char* name);
 int PS4_SYSV_ABI scePthreadCondattrInit(ScePthreadCondattr* attr);
 int PS4_SYSV_ABI scePthreadCondBroadcast(ScePthreadCond* cond);
+int PS4_SYSV_ABI scePthreadCondattrDestroy(ScePthreadCondattr* attr);
 /****
  * Posix calls
  */

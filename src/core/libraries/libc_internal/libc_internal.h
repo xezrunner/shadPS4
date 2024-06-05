@@ -16,6 +16,7 @@ int PS4_SYSV_ABI internal_memcpy_s(void* dest, size_t destsz, const void* src, s
 int PS4_SYSV_ABI internal_strcpy_s(char* dest, size_t dest_size, const char* src);
 int PS4_SYSV_ABI internal_memcmp(const void* s1, const void* s2, size_t n);
 float PS4_SYSV_ABI internal_expf(float x);
+double PS4_SYSV_ABI internal_pow(double base, double exponent);
 
 void RegisterlibSceLibcInternal(Core::Loader::SymbolsResolver* sym);
 } // namespace Libraries::LibcInternal

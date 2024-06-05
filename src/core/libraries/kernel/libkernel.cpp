@@ -7,6 +7,7 @@
 #include "common/error.h"
 #include "common/logging/log.h"
 #include "common/singleton.h"
+#include "core/file_sys/fs.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/cpu_management.h"
 #include "core/libraries/kernel/event_flag/event_flag.h"
@@ -18,7 +19,6 @@
 #include "core/libraries/kernel/time_management.h"
 #include "core/libraries/libs.h"
 #include "core/linker.h"
-#include "core/file_sys/fs.h"
 #include "core/memory.h"
 #ifdef _WIN64
 #include <io.h>
@@ -52,10 +52,6 @@ int PS4_SYSV_ABI sceKernelMunmap(void* addr, size_t len) {
     auto* memory = Core::Memory::Instance();
     memory->UnmapMemory(std::bit_cast<VAddr>(addr), len);
     return SCE_OK;
-}
-
-void PS4_SYSV_ABI sceKernelUsleep(u32 microseconds) {
-    std::this_thread::sleep_for(std::chrono::microseconds(microseconds));
 }
 
 struct iovec {
@@ -221,7 +217,7 @@ s64 PS4_SYSV_ABI ps4__read(int d, void* buf, u64 nbytes) {
         strlen(std::fgets(static_cast<char*>(buf), static_cast<int>(nbytes), stdin)));
 }
 
-size_t PS4_SYSV_ABI sceKernelPread(int fd, void *buf, size_t count, uint64_t offset) {
+size_t PS4_SYSV_ABI sceKernelPread(int fd, void* buf, size_t count, uint64_t offset) {
     long unsigned int read_bytes = 0;
 
     OVERLAPPED overlapped;
@@ -236,8 +232,8 @@ size_t PS4_SYSV_ABI sceKernelPread(int fd, void *buf, size_t count, uint64_t off
     return file.ReadRaw<u8>(buf, count);
 }
 
-s32 PS4_SYSV_ABI sceKernelLoadStartModule(const char *moduleFileName, size_t args, const void *argp,
-                                          u32 flags, const void *pOpt, int *pRes) {
+s32 PS4_SYSV_ABI sceKernelLoadStartModule(const char* moduleFileName, size_t args, const void* argp,
+                                          u32 flags, const void* pOpt, int* pRes) {
     LOG_INFO(Lib_Kernel, "called filename = {}, args = {}", moduleFileName, args);
 
     if (flags != 0) {
@@ -261,7 +257,7 @@ s32 PS4_SYSV_ABI sceKernelLoadStartModule(const char *moduleFileName, size_t arg
     return handle;
 }
 
-s32 PS4_SYSV_ABI sceKernelDlsym(s32 handle, const char *symbol, void **addrp) {
+s32 PS4_SYSV_ABI sceKernelDlsym(s32 handle, const char* symbol, void** addrp) {
     auto* linker = Common::Singleton<Core::Linker>::Instance();
     auto* module = linker->GetModule(handle);
     *addrp = module->FindByName(symbol);
@@ -279,16 +275,19 @@ void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("B+vc2AO2Zrc", "libkernel", 1, "libkernel", 1, 1,
                  sceKernelAllocateMainDirectMemory);
     LIB_FUNCTION("pO96TwzOm5E", "libkernel", 1, "libkernel", 1, 1, sceKernelGetDirectMemorySize);
+    LIB_FUNCTION("NcaWUxfMNIQ", "libkernel", 1, "libkernel", 1, 1, sceKernelMapNamedDirectMemory);
     LIB_FUNCTION("L-Q3LEjIbgA", "libkernel", 1, "libkernel", 1, 1, sceKernelMapDirectMemory);
     LIB_FUNCTION("WFcfL2lzido", "libkernel", 1, "libkernel", 1, 1, sceKernelQueryMemoryProtection);
     LIB_FUNCTION("BHouLQzh0X0", "libkernel", 1, "libkernel", 1, 1, sceKernelDirectMemoryQuery);
     LIB_FUNCTION("MBuItvba6z8", "libkernel", 1, "libkernel", 1, 1, sceKernelReleaseDirectMemory);
-    LIB_FUNCTION("hwVSPCmp5tM", "libkernel", 1, "libkernel", 1, 1, sceKernelCheckedReleaseDirectMemory);
+    LIB_FUNCTION("hwVSPCmp5tM", "libkernel", 1, "libkernel", 1, 1,
+                 sceKernelCheckedReleaseDirectMemory);
     LIB_FUNCTION("cQke9UuBQOk", "libkernel", 1, "libkernel", 1, 1, sceKernelMunmap);
     LIB_FUNCTION("mL8NDH86iQI", "libkernel", 1, "libkernel", 1, 1, sceKernelMapNamedFlexibleMemory);
     LIB_FUNCTION("IWIBBdTHit4", "libkernel", 1, "libkernel", 1, 1, sceKernelMapFlexibleMemory);
     LIB_FUNCTION("rVjRvHJ0X6c", "libkernel", 1, "libkernel", 1, 1, sceKernelVirtualQuery);
-    LIB_FUNCTION("p5EcQeEeJAE", "libkernel", 1, "libkernel", 1, 1, _sceKernelRtldSetApplicationHeapAPI);
+    LIB_FUNCTION("p5EcQeEeJAE", "libkernel", 1, "libkernel", 1, 1,
+                 _sceKernelRtldSetApplicationHeapAPI);
     LIB_FUNCTION("wzvqT4UqKX8", "libkernel", 1, "libkernel", 1, 1, sceKernelLoadStartModule);
     LIB_FUNCTION("LwG8g3niqwA", "libkernel", 1, "libkernel", 1, 1, sceKernelDlsym);
 
@@ -303,7 +302,6 @@ void LibKernel_Register(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("Ou3iL1abvng", "libkernel", 1, "libkernel", 1, 1, stack_chk_fail);
     LIB_FUNCTION("9BcDykPmo1I", "libkernel", 1, "libkernel", 1, 1, __Error);
     LIB_FUNCTION("BPE9s9vQQXo", "libkernel", 1, "libkernel", 1, 1, posix_mmap);
-    LIB_FUNCTION("1jfXLRVzisc", "libkernel", 1, "libkernel", 1, 1, sceKernelUsleep);
     LIB_FUNCTION("YSHRBRLn2pI", "libkernel", 1, "libkernel", 1, 1, _writev);
     LIB_FUNCTION("959qrazPIrg", "libkernel", 1, "libkernel", 1, 1, sceKernelGetProcParam);
     LIB_FUNCTION("-o5uEDpN+oY", "libkernel", 1, "libkernel", 1, 1, sceKernelConvertUtcToLocaltime);

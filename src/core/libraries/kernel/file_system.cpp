@@ -54,6 +54,12 @@ int PS4_SYSV_ABI sceKernelOpen(const char* path, int flags, u16 mode) {
             file->f.Open(file->m_host_name, Common::FS::FileAccessMode::Read);
         } else if (write && create && truncate) {
             file->f.Open(file->m_host_name, Common::FS::FileAccessMode::Write);
+        } else if (rdwr) {
+            if (create) { // Create an empty file first.
+                Common::FS::IOFile out(file->m_host_name, Common::FS::FileAccessMode::Write);
+            }
+            // RW, then scekernelWrite is called and savedata is written just fine now.
+            file->f.Open(file->m_host_name, Common::FS::FileAccessMode::ReadWrite);
         } else {
             UNREACHABLE();
         }

@@ -43,6 +43,10 @@ float PS4_SYSV_ABI internal_expf(float x) {
     return expf(x);
 }
 
+double PS4_SYSV_ABI internal_pow(double base, double exponent) {
+    return pow(base, exponent);
+}
+
 void RegisterlibSceLibcInternal(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("NFLs+dRJGNg", "libSceLibcInternal", 1, "libSceLibcInternal", 1, 1,
                  internal_memcpy_s);
@@ -55,6 +59,7 @@ void RegisterlibSceLibcInternal(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("DfivPArhucg", "libSceLibcInternal", 1, "libSceLibcInternal", 1, 1,
                  internal_memcmp);
     LIB_FUNCTION("8zsu04XNsZ4", "libSceLibcInternal", 1, "libSceLibcInternal", 1, 1, internal_expf);
+    LIB_FUNCTION("9LCjpWyQ5Zc", "libSceLibcInternal", 1, "libSceLibcInternal", 1, 1, internal_pow);
 };
 
 } // namespace Libraries::LibcInternal
