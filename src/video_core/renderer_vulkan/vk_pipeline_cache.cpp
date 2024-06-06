@@ -112,6 +112,7 @@ void PipelineCache::RefreshGraphicsKey() {
         key.color_formats[remapped_cb] =
             LiverpoolToVK::SurfaceFormat(col_buf.info.format, col_buf.NumFormat());
         key.blend_controls[remapped_cb] = regs.blend_control[cb];
+        key.blend_controls[remapped_cb].enable.Assign(key.blend_controls[remapped_cb].enable && !col_buf.info.blend_bypass);
         key.write_masks[remapped_cb] = vk::ColorComponentFlags{regs.color_target_mask.GetMask(cb)};
 
         ++remapped_cb;
@@ -160,6 +161,7 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
         inst_pool.ReleaseContents();
 
         // Recompile shader to IR.
+        LOG_INFO(Render_Vulkan, "Compiling shader {:#x}", hash);
         const Shader::Info info = MakeShaderInfo(stage, pgm->user_data, regs);
         programs[i] = Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info));
 

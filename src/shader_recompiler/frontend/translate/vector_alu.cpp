@@ -372,4 +372,15 @@ void Translator::V_RNDNE_F32(const GcnInst& inst) {
     SetDst(inst.dst[0], ir.FPRoundEven(src0));
 }
 
+void Translator::V_BCNT_U32_B32(const GcnInst& inst) {
+    const IR::U32 src0{GetSrc(inst.src[0])};
+    const IR::U32 src1{GetSrc(inst.src[1])};
+    SetDst(inst.dst[0], ir.IAdd(ir.BitCount(src0), src1));
+}
+
+void Translator::V_COS_F32(const GcnInst& inst) {
+    const IR::F32 src0{GetSrc(inst.src[0], true)};
+    SetDst(inst.dst[0], ir.FPCos(src0));
+}
+
 } // namespace Shader::Gcn

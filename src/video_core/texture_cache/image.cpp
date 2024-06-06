@@ -9,6 +9,7 @@
 #include "video_core/texture_cache/image.h"
 #include "video_core/texture_cache/tile_manager.h"
 
+#include <vulkan/vulkan_format_traits.hpp>
 #include <vk_mem_alloc.h>
 
 namespace VideoCore {
@@ -37,10 +38,10 @@ static vk::ImageUsageFlags ImageUsageFlags(const vk::Format format) {
     vk::ImageUsageFlags usage = vk::ImageUsageFlagBits::eTransferSrc |
                                 vk::ImageUsageFlagBits::eTransferDst |
                                 vk::ImageUsageFlagBits::eSampled;
-    if (false /*&& IsDepthStencilFormat(format)*/) {
+    if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD32Sfloat) {
         usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
     } else {
-        if (format != vk::Format::eBc3SrgbBlock) {
+        if (format != vk::Format::eBc3SrgbBlock && format != vk::Format::eBc3UnormBlock && format != vk::Format::eBc1RgbaUnormBlock) {
             usage |= vk::ImageUsageFlagBits::eColorAttachment;
         }
     }
@@ -89,6 +90,18 @@ ImageInfo::ImageInfo(const AmdGpu::Liverpool::ColorBuffer& buffer,
                      const AmdGpu::Liverpool::CbDbExtent& hint /*= {}*/) noexcept {
     is_tiled = buffer.IsTiled();
     pixel_format = LiverpoolToVK::SurfaceFormat(buffer.info.format, buffer.NumFormat());
+    type = vk::ImageType::e2D;
+    size.width = hint.Valid() ? hint.width : buffer.Pitch();
+    size.height = hint.Valid() ? hint.height : buffer.Height();
+    size.depth = 1;
+    pitch = size.width;
+    guest_size_bytes = buffer.GetSizeAligned();
+}
+
+ImageInfo::ImageInfo(const AmdGpu::Liverpool::DepthBuffer& buffer,
+                     const AmdGpu::Liverpool::CbDbExtent& hint) noexcept {
+    is_tiled = false;
+    pixel_format = LiverpoolToVK::DepthFormat(buffer.z_info.format, buffer.stencil_info.format);
     type = vk::ImageType::e2D;
     size.width = hint.Valid() ? hint.width : buffer.Pitch();
     size.height = hint.Valid() ? hint.height : buffer.Height();
@@ -158,10 +171,20 @@ Image::Image(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
             flags |= vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
         }
     }
+    if (info.pixel_format == vk::Format::eR16Sscaled) {
+        info.is_tiled = false;
+        flags = {};
+    }
 
     info.usage = ImageUsageFlags(info.pixel_format);
-    if (info.is_tiled || info.is_storage) {
+    if ((info.is_tiled && (info.pixel_format != vk::Format::eBc3UnormBlock) && info.pixel_format != vk::Format::eBc1RgbaSrgbBlock) || info.is_storage) {
         info.usage |= vk::ImageUsageFlagBits::eStorage;
+    }
+    if (info.pixel_format == vk::Format::eD32Sfloat) {
+        aspect_mask = vk::ImageAspectFlagBits::eDepth;
+    }
+    if (info.pixel_format == vk::Format::eD32SfloatS8Uint) {
+        aspect_mask = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
     }
 
     const vk::ImageCreateInfo image_ci = {
@@ -187,7 +210,7 @@ Image::Image(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
         ImageViewInfo view_info;
         view_info.format = DemoteImageFormatForDetiling(info.pixel_format);
         view_info.used_for_detiling = true;
-        view_for_detiler.emplace(*instance, view_info, image);
+        view_for_detiler.emplace(*instance, view_info, *this);
     }
 
     Transit(vk::ImageLayout::eGeneral, vk::AccessFlagBits::eNone);

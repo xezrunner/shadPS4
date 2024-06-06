@@ -63,8 +63,9 @@ GraphicsPipeline::GraphicsPipeline(const Instance& instance_, Scheduler& schedul
         .pVertexAttributeDescriptions = attributes.data(),
     };
 
-    ASSERT_MSG(key.prim_type != Liverpool::PrimitiveType::RectList || IsEmbeddedVs(),
-               "Rectangle List primitive type is only supported for embedded VS");
+    if (key.prim_type == Liverpool::PrimitiveType::RectList && !IsEmbeddedVs()) {
+        LOG_WARNING(Render_Vulkan, "Rectangle List primitive type is only supported for embedded VS");
+    }
 
     const vk::PipelineInputAssemblyStateCreateInfo input_assembly = {
         .topology = LiverpoolToVK::PrimitiveType(key.prim_type),

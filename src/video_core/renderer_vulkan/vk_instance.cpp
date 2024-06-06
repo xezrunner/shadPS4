@@ -42,8 +42,8 @@ Instance::Instance(bool enable_validation, bool dump_command_buffers)
 
 Instance::Instance(Frontend::WindowSDL& window, s32 physical_device_index)
     : instance{CreateInstance(dl, window.getWindowInfo().type, true, false)},
-      debug_callback{CreateDebugCallback(*instance)},
       physical_devices{instance->enumeratePhysicalDevices()} {
+    debug_callback = CreateDebugCallback(*instance);
     const std::size_t num_physical_devices = static_cast<u16>(physical_devices.size());
     ASSERT_MSG(num_physical_devices > 0, "No physical devices found");
 

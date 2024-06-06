@@ -4,6 +4,7 @@
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/texture_cache/image_view.h"
+#include "video_core/texture_cache/image.h"
 
 namespace VideoCore {
 
@@ -58,7 +59,7 @@ ImageViewInfo::ImageViewInfo(const AmdGpu::Image& image) noexcept {
     mapping.a = ConvertComponentSwizzle(image.dst_sel_w);
 }
 
-ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info_, vk::Image image,
+ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info_, Image& image,
                      std::optional<vk::ImageUsageFlags> usage_override /*= {}*/)
     : info{info_} {
     vk::ImageViewUsageCreateInfo usage_ci{};
@@ -68,14 +69,14 @@ ImageView::ImageView(const Vulkan::Instance& instance, const ImageViewInfo& info
 
     const vk::ImageViewCreateInfo image_view_ci = {
         .pNext = usage_override.has_value() ? &usage_ci : nullptr,
-        .image = image,
+        .image = image.image,
         .viewType = info.type,
         .format = info.format,
         .components = info.mapping,
         .subresourceRange{
-            .aspectMask = vk::ImageAspectFlagBits::eColor,
+            .aspectMask = image.aspect_mask,
             .baseMipLevel = 0U,
-            .levelCount = 1,
+            .levelCount = 1u,
             .baseArrayLayer = 0,
             .layerCount = VK_REMAINING_ARRAY_LAYERS,
         },

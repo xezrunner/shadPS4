@@ -129,6 +129,7 @@ void IREmitter::SetThreadBitScalarReg(IR::ScalarReg reg, const U1& value) {
 
 template <>
 U32 IREmitter::GetScalarReg(IR::ScalarReg reg) {
+    ASSERT(reg < IR::ScalarReg::Max);
     return Inst<U32>(Opcode::GetScalarRegister, reg);
 }
 

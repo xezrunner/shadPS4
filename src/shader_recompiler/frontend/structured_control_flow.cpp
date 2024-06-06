@@ -823,6 +823,7 @@ IR::AbstractSyntaxList BuildASL(ObjectPool<IR::Inst>& inst_pool, ObjectPool<IR::
     Statement& root{goto_pass.RootStatement()};
     IR::AbstractSyntaxList syntax_list;
     TranslatePass{inst_pool, block_pool, stmt_pool, root, syntax_list, cfg.inst_list, info};
+    fmt::print("Tree:\n {}\n\n", DumpTree(root.children));
     return syntax_list;
 }
 

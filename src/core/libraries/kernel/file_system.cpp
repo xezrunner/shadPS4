@@ -12,7 +12,7 @@
 namespace Libraries::Kernel {
 
 int PS4_SYSV_ABI sceKernelOpen(const char* path, int flags, u16 mode) {
-    LOG_INFO(Kernel_Fs, "path = {} flags = {:#x} mode = {}", path, flags, mode);
+    //LOG_INFO(Kernel_Fs, "path = {} flags = {:#x} mode = {}", path, flags, mode);
     auto* h = Common::Singleton<Core::FileSys::HandleTable>::Instance();
     auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
 
@@ -170,7 +170,7 @@ int PS4_SYSV_ABI sceKernelMkdir(const char* path, u16 mode) {
 }
 
 int PS4_SYSV_ABI sceKernelStat(const char* path, OrbisKernelStat* sb) {
-    LOG_INFO(Kernel_Fs, "(PARTIAL) path = {}", path);
+    //LOG_INFO(Kernel_Fs, "(PARTIAL) path = {}", path);
     auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
     std::string path_name = mnt->GetHostFile(path);
     memset(sb, 0, sizeof(OrbisKernelStat));
@@ -198,7 +198,18 @@ int PS4_SYSV_ABI sceKernelStat(const char* path, OrbisKernelStat* sb) {
 int PS4_SYSV_ABI posix_stat(const char* path, OrbisKernelStat* sb) {
     int result = sceKernelStat(path, sb);
     if (result < 0) {
-        UNREACHABLE(); // TODO
+        return result;
+        //UNREACHABLE(); // TODO
+    }
+    return ORBIS_OK;
+}
+
+int PS4_SYSV_ABI sceKernelCheckReachability(const char* path) {
+    //LOG_INFO(Lib_Kernel, "path = {}", path);
+    auto* mnt = Common::Singleton<Core::FileSys::MntPoints>::Instance();
+    std::string path_name = mnt->GetHostFile(path);
+    if (!std::filesystem::exists(path_name)) {
+        return SCE_KERNEL_ERROR_ENOENT;
     }
     return ORBIS_OK;
 }
@@ -216,6 +227,7 @@ void fileSystemSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("1-LFLmRFxxM", "libkernel", 1, "libkernel", 1, 1, sceKernelMkdir);
     LIB_FUNCTION("eV9wAD2riIA", "libkernel", 1, "libkernel", 1, 1, sceKernelStat);
     LIB_FUNCTION("E6ao34wPw+U", "libScePosix", 1, "libkernel", 1, 1, posix_stat);
+    LIB_FUNCTION("uWyW3v98sU4", "libkernel", 1, "libkernel", 1, 1, sceKernelCheckReachability);
 
     // openOrbis (to check if it is valid out of OpenOrbis
     LIB_FUNCTION("6c3rCVE-fTU", "libkernel", 1, "libkernel", 1, 1,

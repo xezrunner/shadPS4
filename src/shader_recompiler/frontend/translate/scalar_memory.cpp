@@ -18,11 +18,13 @@ void Translator::S_LOAD_DWORD(int num_dwords, const GcnInst& inst) {
 }
 
 void Translator::S_BUFFER_LOAD_DWORD(int num_dwords, const GcnInst& inst) {
+    static constexpr u32 SQ_SRC_LITERAL = 0xFF;
     const auto& smrd = inst.control.smrd;
     const IR::ScalarReg sbase{inst.src[0].code * 2};
-    const IR::U32 dword_offset =
-        smrd.imm ? ir.Imm32(smrd.offset) : ir.GetScalarReg(IR::ScalarReg(smrd.offset));
     const IR::Value vsharp = ir.GetScalarReg(sbase);
+    const IR::U32 dword_offset =
+        smrd.imm ? ir.Imm32(smrd.offset) : (smrd.offset == SQ_SRC_LITERAL ? ir.Imm32(inst.src[1].code)
+                                                                          : ir.GetScalarReg(IR::ScalarReg(smrd.offset)));
     IR::ScalarReg dst_reg{inst.dst[0].code};
     for (u32 i = 0; i < num_dwords; i++) {
         const IR::U32 index = ir.IAdd(dword_offset, ir.Imm32(i));

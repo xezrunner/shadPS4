@@ -304,7 +304,7 @@ bool TileManager::TryDetile(Image& image) {
         return false;
     }
 
-    const auto& [data, offset, _] = staging.Map(image.info.guest_size_bytes, 4);
+    const auto& [data, offset, _] = staging.Map(image.info.guest_size_bytes, 64);
     const u8* image_data = reinterpret_cast<const u8*>(image.cpu_addr);
     std::memcpy(data, image_data, image.info.guest_size_bytes);
     staging.Commit(image.info.guest_size_bytes);

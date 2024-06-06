@@ -16,9 +16,10 @@ Id EmitImageSampleImplicitLod(EmitContext& ctx, IR::Inst* inst, u32 handle, Id c
     return ctx.OpImageSampleImplicitLod(ctx.F32[4], sampled_image, coords);
 }
 
-Id EmitImageSampleExplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value& index, Id coords,
-                              Id lod, const IR::Value& offset) {
-    throw NotImplementedException("SPIR-V Instruction");
+Id EmitImageSampleExplicitLod(EmitContext& ctx, IR::Inst* inst, u32 handle, Id coords, Id bias_lc,
+                              Id offset) {
+    // TODO
+    return EmitImageSampleImplicitLod(ctx, inst, handle, coords, bias_lc, offset);
 }
 
 Id EmitImageSampleDrefImplicitLod(EmitContext& ctx, IR::Inst* inst, const IR::Value& index,

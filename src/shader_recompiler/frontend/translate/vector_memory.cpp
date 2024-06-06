@@ -31,7 +31,7 @@ void Translator::IMAGE_GET_RESINFO(const GcnInst& inst) {
 
 void Translator::IMAGE_SAMPLE(const GcnInst& inst) {
     const auto& mimg = inst.control.mimg;
-    ASSERT(!mimg.da);
+    //ASSERT(!mimg.da);
 
     IR::VectorReg addr_reg{inst.src[0].code};
     IR::VectorReg dest_reg{inst.dst[0].code};

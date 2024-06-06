@@ -140,10 +140,7 @@ std::vector<const char*> GetInstanceExtensions(Frontend::WindowSystemType window
     if (window_type != Frontend::WindowSystemType::Headless) {
         extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
     }
-
-    if (enable_debug_utils) {
-        extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-    }
+    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
     // Sanitize extension list
     std::erase_if(extensions, [&](const char* extension) -> bool {
