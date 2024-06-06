@@ -60,7 +60,8 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset) {
         });
     }
     if (regs.depth_control.depth_enable && regs.depth_buffer.Address() != 0) {
-        const auto& image_view = texture_cache.DepthTarget(regs.depth_buffer, liverpool->last_db_extent);
+        const auto& image_view =
+            texture_cache.DepthTarget(regs.depth_buffer, liverpool->last_db_extent);
         depth_attachment = {
             .imageView = *image_view.image_view,
             .imageLayout = vk::ImageLayout::eGeneral,
@@ -91,7 +92,9 @@ void Rasterizer::Draw(bool is_indexed, u32 index_offset) {
     if (is_indexed) {
         cmdbuf.drawIndexed(num_indices, regs.num_instances.NumInstances(), 0, 0, 0);
     } else {
-        const u32 num_vertices = regs.primitive_type == AmdGpu::Liverpool::PrimitiveType::RectList ? 4 : regs.num_indices;
+        const u32 num_vertices = regs.primitive_type == AmdGpu::Liverpool::PrimitiveType::RectList
+                                     ? 4
+                                     : regs.num_indices;
         cmdbuf.draw(num_vertices, regs.num_instances.NumInstances(), 0, 0);
     }
     cmdbuf.endRendering();
@@ -175,7 +178,7 @@ void Rasterizer::UpdateViewportScissorState() {
         .y = regs.viewports[0].yoffset - regs.viewports[0].yscale,
         .width = regs.viewports[0].xscale * 2.0f,
         .height = regs.viewports[0].yscale * 2.0f,
-        .minDepth = /*regs.viewports[0].zoffset - regs.viewports[0].zscale*/0.f,
+        .minDepth = /*regs.viewports[0].zoffset - regs.viewports[0].zscale*/ 0.f,
         .maxDepth = regs.viewports[0].zscale + regs.viewports[0].zoffset,
     };
     const vk::Rect2D scissor{

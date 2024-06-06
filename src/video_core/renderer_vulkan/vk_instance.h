@@ -194,6 +194,7 @@ private:
 
 private:
     vk::DynamicLoader dl;
+    bool enable_validation{};
     vk::UniqueInstance instance;
     vk::PhysicalDevice physical_device;
     vk::UniqueDevice device;

@@ -7,6 +7,7 @@
 #include "common/bit_field.h"
 #include "common/types.h"
 #include "video_core/amdgpu/pixel_format.h"
+#include "video_core/amdgpu/gpuaddr/gpuaddr.h"
 
 namespace AmdGpu {
 
@@ -132,10 +133,21 @@ struct Image {
     }
 
     u32 NumLayers() const {
-        return last_array - base_array + 1;
+        u32 slices = type == ImageType::Color3D ? 1 : depth.Value() + 1;
+        if (type == ImageType::Cube) {
+            slices *= 6;
+        }
+        if (pow2pad) {
+            slices = std::bit_ceil(slices);
+        }
+        return slices;
     }
 
     u32 NumLevels() const {
+        if (type == ImageType::Color2DMsaa ||
+            type == ImageType::Color2DMsaaArray) {
+            return 1;
+        }
         return last_level + 1;
     }
 
@@ -155,9 +167,29 @@ struct Image {
         return GetTilingMode() != TilingMode::Display_Linear;
     }
 
-    [[nodiscard]] size_t GetSizeAligned() const {
-        // TODO: Derive this properly from tiling params
-        return (width + 1) * (height + 1) * NumComponents(GetDataFmt());
+    [[nodiscard]] size_t GetSizeAligned(const GpaTextureInfo& texinfo) const {
+        GpaTilingParams tp = {};
+        GpaError err = gpaTpInit(&tp, &texinfo, 0, 0);
+        ASSERT(err == GPA_ERR_OK);
+
+        GpaSurfaceInfo surfinfo = {};
+        size_t size = {};
+        for (uint32_t i = 0; i < NumLevels(); i += 1) {
+            tp.linearwidth = std::max(texinfo.width >> i, 1U);
+            tp.linearheight = std::max(texinfo.height >> i, 1U);
+            tp.lineardepth = std::max(texinfo.depth >> i, 1U);
+            tp.miplevel = i;
+
+            err = gpaComputeSurfaceInfo(&surfinfo, &tp);
+            ASSERT(err == GPA_ERR_OK);
+
+            size += NumLayers() * surfinfo.surfacesize;
+            if (tp.linearwidth == 1 && tp.linearheight == 1 &&
+                tp.lineardepth == 1) {
+                break;
+            }
+        }
+        return size;
     }
 };
 

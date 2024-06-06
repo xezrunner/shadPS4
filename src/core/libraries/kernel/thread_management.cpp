@@ -393,7 +393,7 @@ int PS4_SYSV_ABI scePthreadMutexInit(ScePthreadMutex* mutex, const ScePthreadMut
     int result = pthread_mutex_init(&(*mutex)->pth_mutex, &(*attr)->pth_mutex_attr);
 
     if (name != nullptr) {
-        //LOG_INFO(Kernel_Pthread, "name={}, result={}", name, result);
+        // LOG_INFO(Kernel_Pthread, "name={}, result={}", name, result);
     }
 
     switch (result) {
@@ -418,7 +418,7 @@ int PS4_SYSV_ABI scePthreadMutexDestroy(ScePthreadMutex* mutex) {
 
     int result = pthread_mutex_destroy(&(*mutex)->pth_mutex);
 
-    //LOG_INFO(Kernel_Pthread, "name={}, result={}", (*mutex)->name, result);
+    // LOG_INFO(Kernel_Pthread, "name={}, result={}", (*mutex)->name, result);
 
     delete *mutex;
     *mutex = nullptr;
@@ -1036,7 +1036,6 @@ void* PS4_SYSV_ABI __tls_get_addr(TlsIndex* index) {
     auto* linker = Common::Singleton<Core::Linker>::Instance();
     return linker->TlsGetAddr(index->ti_module, index->ti_offset);
 }
-
 
 int PS4_SYSV_ABI scePthreadCondDestroy(ScePthreadCond* cond) {
     if (cond == nullptr) {

@@ -10,11 +10,9 @@
 #include "video_core/amdgpu/pixel_format.h"
 
 #include <array>
-#include <condition_variable>
 #include <coroutine>
-#include <functional>
-#include <future>
 #include <span>
+#include <mutex>
 #include <thread>
 #include <queue>
 

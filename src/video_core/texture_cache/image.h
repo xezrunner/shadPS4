@@ -8,6 +8,7 @@
 #include "core/libraries/videoout/buffer.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/amdgpu/resource.h"
+#include "video_core/amdgpu/gpuaddr/gpuaddr.h"
 #include "video_core/renderer_vulkan/vk_common.h"
 #include "video_core/texture_cache/image_view.h"
 #include "video_core/texture_cache/types.h"
@@ -52,6 +53,7 @@ struct ImageInfo {
     u32 pitch = 0;
     u32 guest_size_bytes = 0;
     AmdGpu::TilingMode tiling_mode{AmdGpu::TilingMode::Display_Linear};
+    GpaTextureInfo texinfo{};
 };
 
 struct UniqueImage {

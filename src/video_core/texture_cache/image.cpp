@@ -9,8 +9,8 @@
 #include "video_core/texture_cache/image.h"
 #include "video_core/texture_cache/tile_manager.h"
 
-#include <vulkan/vulkan_format_traits.hpp>
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan_format_traits.hpp>
 
 namespace VideoCore {
 
@@ -41,7 +41,8 @@ static vk::ImageUsageFlags ImageUsageFlags(const vk::Format format) {
     if (format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD32Sfloat) {
         usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
     } else {
-        if (format != vk::Format::eBc3SrgbBlock && format != vk::Format::eBc3UnormBlock && format != vk::Format::eBc1RgbaUnormBlock) {
+        if (format != vk::Format::eBc3SrgbBlock && format != vk::Format::eBc3UnormBlock &&
+            format != vk::Format::eBc1RgbaUnormBlock) {
             usage |= vk::ImageUsageFlagBits::eColorAttachment;
         }
     }
@@ -54,10 +55,10 @@ static vk::ImageType ConvertImageType(AmdGpu::ImageType type) noexcept {
         return vk::ImageType::e1D;
     case AmdGpu::ImageType::Color2D:
     case AmdGpu::ImageType::Color1DArray:
+    case AmdGpu::ImageType::Color2DArray:
     case AmdGpu::ImageType::Cube:
         return vk::ImageType::e2D;
     case AmdGpu::ImageType::Color3D:
-    case AmdGpu::ImageType::Color2DArray:
         return vk::ImageType::e3D;
     default:
         UNREACHABLE();
@@ -121,7 +122,28 @@ ImageInfo::ImageInfo(const AmdGpu::Image& image) noexcept {
     pitch = image.Pitch();
     resources.levels = image.NumLevels();
     resources.layers = image.NumLayers();
-    guest_size_bytes = image.GetSizeAligned();
+    texinfo = GpaTextureInfo{
+        .type = static_cast<GnmTextureType>(image.type.Value()),
+        .fmt = {
+            .surfacefmt = static_cast<GnmImageFormat>(image.data_format.Value()),
+            .chantype = static_cast<GnmImgNumFormat>(image.num_format.Value()),
+            .chanx = static_cast<GnmChannel>(image.dst_sel_x.Value()),
+            .chany = static_cast<GnmChannel>(image.dst_sel_y.Value()),
+            .chanz = static_cast<GnmChannel>(image.dst_sel_z.Value()),
+            .chanw = static_cast<GnmChannel>(image.dst_sel_w.Value()),
+        },
+        .width = static_cast<u32>(image.width.Value() + 1),
+        .height = static_cast<u32>(image.height.Value() + 1),
+        .pitch = image.Pitch(),
+        .depth = 1,
+        .numfrags = 1,
+        .nummips = image.NumLevels(),
+        .numslices = image.NumLayers(),
+        .tm = static_cast<GnmTileMode>(image.tiling_index.Value()),
+        .mingpumode = GNM_GPU_BASE,
+        .pow2pad = bool(image.pow2pad.Value()),
+    };
+    guest_size_bytes = image.GetSizeAligned(texinfo);
 }
 
 UniqueImage::UniqueImage(vk::Device device_, VmaAllocator allocator_)
@@ -165,21 +187,8 @@ Image::Image(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
     if (info.type == vk::ImageType::e3D) {
         flags |= vk::ImageCreateFlagBits::e2DArrayCompatible;
     }
-    if (info.is_tiled) {
-        flags |= vk::ImageCreateFlagBits::eExtendedUsage;
-        if (false) { // IsBlockCodedFormat()
-            flags |= vk::ImageCreateFlagBits::eBlockTexelViewCompatible;
-        }
-    }
-    if (info.pixel_format == vk::Format::eR16Sscaled) {
-        info.is_tiled = false;
-        flags = {};
-    }
 
     info.usage = ImageUsageFlags(info.pixel_format);
-    if ((info.is_tiled && (info.pixel_format != vk::Format::eBc3UnormBlock) && info.pixel_format != vk::Format::eBc1RgbaSrgbBlock) || info.is_storage) {
-        info.usage |= vk::ImageUsageFlagBits::eStorage;
-    }
     if (info.pixel_format == vk::Format::eD32Sfloat) {
         aspect_mask = vk::ImageAspectFlagBits::eDepth;
     }
@@ -221,24 +230,26 @@ void Image::Transit(vk::ImageLayout dst_layout, vk::Flags<vk::AccessFlagBits> ds
         return;
     }
 
-    const vk::ImageMemoryBarrier barrier = {.srcAccessMask = access_mask,
-                                            .dstAccessMask = dst_mask,
-                                            .oldLayout = layout,
-                                            .newLayout = dst_layout,
-                                            .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                            .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-                                            .image = image,
-                                            .subresourceRange{
-                                                .aspectMask = aspect_mask,
-                                                .baseMipLevel = 0,
-                                                .levelCount = VK_REMAINING_MIP_LEVELS,
-                                                .baseArrayLayer = 0,
-                                                .layerCount = VK_REMAINING_ARRAY_LAYERS,
-                                            }};
+    const vk::ImageMemoryBarrier barrier = {
+        .srcAccessMask = access_mask,
+        .dstAccessMask = dst_mask,
+        .oldLayout = layout,
+        .newLayout = dst_layout,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange{
+            .aspectMask = aspect_mask,
+            .baseMipLevel = 0,
+            .levelCount = VK_REMAINING_MIP_LEVELS,
+            .baseArrayLayer = 0,
+            .layerCount = VK_REMAINING_ARRAY_LAYERS,
+        },
+    };
 
     // Adjust pipieline stage
-    vk::PipelineStageFlagBits dst_pl_stage = (dst_mask == vk::AccessFlagBits::eTransferRead ||
-                                              dst_mask == vk::AccessFlagBits::eTransferWrite)
+    const vk::PipelineStageFlagBits dst_pl_stage = (dst_mask == vk::AccessFlagBits::eTransferRead ||
+                                                    dst_mask == vk::AccessFlagBits::eTransferWrite)
                                                  ? vk::PipelineStageFlagBits::eTransfer
                                                  : vk::PipelineStageFlagBits::eAllGraphics;
     const auto cmdbuf = scheduler->CommandBuffer();

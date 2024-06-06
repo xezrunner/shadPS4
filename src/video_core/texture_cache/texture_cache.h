@@ -37,7 +37,8 @@ public:
     void OnCpuWrite(VAddr address);
 
     /// Retrieves the image handle of the image with the provided attributes and address.
-    [[nodiscard]] Image& FindImage(const ImageInfo& info, VAddr cpu_address, bool refresh_on_create = true);
+    [[nodiscard]] Image& FindImage(const ImageInfo& info, VAddr cpu_address,
+                                   bool refresh_on_create = true);
 
     /// Retrieves an image view with the properties of the specified image descriptor.
     [[nodiscard]] ImageView& FindImageView(const AmdGpu::Image& image);

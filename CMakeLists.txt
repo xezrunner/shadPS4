@@ -377,6 +377,18 @@ set(VIDEO_CORE src/video_core/amdgpu/liverpool.cpp
                src/video_core/amdgpu/pm4_cmds.h
                src/video_core/amdgpu/pm4_opcodes.h
                src/video_core/amdgpu/resource.h
+               src/video_core/amdgpu/gpuaddr/dataformat.cpp
+               src/video_core/amdgpu/gpuaddr/dataformat.h
+               src/video_core/amdgpu/gpuaddr/element.cpp
+               src/video_core/amdgpu/gpuaddr/error.cpp
+               src/video_core/amdgpu/gpuaddr/error.h
+               src/video_core/amdgpu/gpuaddr/gpuaddr.h
+               src/video_core/amdgpu/gpuaddr/gpuaddr_private.h
+               src/video_core/amdgpu/gpuaddr/surface.cpp
+               src/video_core/amdgpu/gpuaddr/surfgen.cpp
+               src/video_core/amdgpu/gpuaddr/tilemodes.cpp
+               src/video_core/amdgpu/gpuaddr/tiler.cpp
+               src/video_core/amdgpu/gpuaddr/types.h
                src/video_core/renderer_vulkan/liverpool_to_vk.cpp
                src/video_core/renderer_vulkan/liverpool_to_vk.h
                src/video_core/renderer_vulkan/renderer_vulkan.cpp

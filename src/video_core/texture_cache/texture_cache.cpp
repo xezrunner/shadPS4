@@ -4,6 +4,7 @@
 #include <xxhash.h>
 #include "common/assert.h"
 #include "common/config.h"
+#include "common/error.h"
 #include "core/virtual_memory.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
@@ -23,7 +24,7 @@
 void mprotect(void* addr, size_t len, int prot) {
     DWORD old_prot{};
     BOOL result = VirtualProtect(addr, len, prot, &old_prot);
-    ASSERT_MSG(result != 0, "Region protection failed");
+    ASSERT_MSG(result != 0, "Region protection failed {}", Common::GetLastErrorMsg());
 }
 
 #endif
@@ -153,8 +154,7 @@ ImageView& TextureCache::RegisterImageView(Image& image, const ImageViewInfo& vi
         usage_override = image.info.usage & ~vk::ImageUsageFlagBits::eStorage;
     }
 
-    const ImageViewId view_id =
-        slot_image_views.insert(instance, view_info, image, usage_override);
+    const ImageViewId view_id = slot_image_views.insert(instance, view_info, image, usage_override);
     image.image_view_infos.emplace_back(view_info);
     image.image_view_ids.emplace_back(view_id);
     return slot_image_views[view_id];
@@ -193,81 +193,58 @@ void TextureCache::RefreshImage(Image& image) {
     // Mark image as validated.
     image.flags &= ~ImageFlagBits::CpuModified;
 
-    {
-        if (!tile_manager.TryDetile(image)) {
-            // Upload data to the staging buffer.
-            const auto& [data, offset, _] = staging.Map(image.info.guest_size_bytes, 4);
-            const u8* image_data = reinterpret_cast<const u8*>(image.cpu_addr);
-            std::memcpy(data, image_data, image.info.guest_size_bytes);
-            staging.Commit(image.info.guest_size_bytes);
-
-            const auto cmdbuf = scheduler.CommandBuffer();
-            image.Transit(vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite);
-
-            // Copy to the image.
-            const vk::BufferImageCopy image_copy = {
-                .bufferOffset = offset,
-                .bufferRowLength = 0,
-                .bufferImageHeight = 0,
-                .imageSubresource{
-                    .aspectMask = vk::ImageAspectFlagBits::eColor,
-                    .mipLevel = 0,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1,
-                },
-                .imageOffset = {0, 0, 0},
-                .imageExtent = {image.info.size.width, image.info.size.height, 1},
-            };
-
-            cmdbuf.copyBufferToImage(staging.Handle(), image.image,
-                                     vk::ImageLayout::eTransferDstOptimal, image_copy);
-        }
-
-        image.Transit(vk::ImageLayout::eGeneral,
-                      vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead);
-        return;
-    }
-
     const u8* image_data = reinterpret_cast<const u8*>(image.cpu_addr);
-    for (u32 m = 0; m < image.info.resources.levels; m++) {
-        const u32 width = image.info.size.width >> m;
-        const u32 height = image.info.size.height >> m;
-        const u32 map_size = width * height * image.info.resources.layers;
+    const auto [staging_data, offset, _] = staging.Map(image.info.guest_size_bytes, 16);
+    if (image.info.texinfo.tm == GnmTileMode::GNM_TM_DISPLAY_LINEAR_GENERAL) {
+        std::memcpy(staging_data, image_data, image.info.guest_size_bytes);
+    } else {
+        const GpaError res = gpaDetileTextureAll(image_data, image.info.guest_size_bytes, staging_data,
+                                                 image.info.guest_size_bytes, &image.info.texinfo);
+        ASSERT_MSG(res == GPA_ERR_OK, "Texture detiling failed with error: {}", gpaStrError(res));
+    }
+    staging.Commit(image.info.guest_size_bytes);
 
-        // Upload data to the staging buffer.
-        const auto [data, offset, _] = staging.Map(map_size, 16);
-        if (image.info.is_tiled) {
-            ConvertTileToLinear(data, image_data, width, height, Config::isNeoMode());
-        } else {
-            std::memcpy(data, image_data, map_size);
-        }
-        staging.Commit(map_size);
-        image_data += map_size;
+    // The mipmaps of each slice are next to each other in memory. So we iterate each layer
+    // and detile its mipmaps. Vulkan allows us to copy to the same mipmap of multiple layers at
+    // once, so we try to upload in that order.
+    boost::container::small_vector<vk::BufferImageCopy, 50> image_copies;
+    for (u32 mip = 0; mip < image.info.resources.levels; mip++) {
+        // Initialize tiling parameters.
+        GpaTilingParams tp = {};
+        GpaError res = gpaTpInit(&tp, &image.info.texinfo, mip, 0);
+        ASSERT(res == GPA_ERR_OK);
 
-        // Copy to the image.
-        const vk::BufferImageCopy image_copy = {
-            .bufferOffset = offset,
+        // Figure out the offset of the slice0 mip in the image data and its size.
+        u64 surfoffset = 0;
+        u64 surfsize = 0;
+        res = gpaCalcSurfaceSizeOffset(&surfsize, &surfoffset, &image.info.texinfo, mip, 0);
+        ASSERT(res == GPA_ERR_OK);
+
+        // Add a new buffer copy for later.
+        image_copies.push_back({
+            .bufferOffset = offset + surfoffset,
             .bufferRowLength = 0,
             .bufferImageHeight = 0,
             .imageSubresource{
                 .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = m,
+                .mipLevel = mip,
                 .baseArrayLayer = 0,
                 .layerCount = u32(image.info.resources.layers),
             },
             .imageOffset = {0, 0, 0},
-            .imageExtent = {width, height, 1},
-        };
-
-        const auto cmdbuf = scheduler.CommandBuffer();
-        image.Transit(vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite);
-
-        cmdbuf.copyBufferToImage(staging.Handle(), image.image,
-                                 vk::ImageLayout::eTransferDstOptimal, image_copy);
-
-        image.Transit(vk::ImageLayout::eGeneral,
-                      vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead);
+            .imageExtent = {image.info.size.width >> mip, image.info.size.height >> mip, 1},
+        });
     }
+
+    // Perform copy.
+    const auto cmdbuf = scheduler.CommandBuffer();
+    image.Transit(vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite);
+
+    cmdbuf.copyBufferToImage(staging.Handle(), image.image,
+                             vk::ImageLayout::eTransferDstOptimal, image_copies);
+
+    image.Transit(vk::ImageLayout::eGeneral,
+                  vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eTransferRead);
 }
 
 vk::Sampler TextureCache::GetSampler(const AmdGpu::Sampler& sampler) {

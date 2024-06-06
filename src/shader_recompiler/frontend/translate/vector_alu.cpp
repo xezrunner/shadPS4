@@ -25,8 +25,7 @@ void Translator::V_CVT_PKRTZ_F16_F32(const GcnInst& inst) {
 }
 
 void Translator::V_MUL_F32(const GcnInst& inst) {
-    const IR::VectorReg dst_reg{inst.dst[0].code};
-    ir.SetVectorReg(dst_reg, ir.FPMul(GetSrc(inst.src[0], true), GetSrc(inst.src[1], true)));
+    SetDst(inst.dst[0], ir.FPMul(GetSrc(inst.src[0], true), GetSrc(inst.src[1], true)));
 }
 
 void Translator::V_CNDMASK_B32(const GcnInst& inst) {
