@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <thread>
+#include <pthread.h>
 #include "common/native_clock.h"
 #include "core/libraries/kernel/time_management.h"
 #include "core/libraries/libs.h"
@@ -125,6 +126,10 @@ int PS4_SYSV_ABI gettimeofday(struct timeval* p, struct timezone* z) {
     return 0;
 }
 
+int PS4_SYSV_ABI posix_nanosleep(timespec* requested_time, timespec* remaining) {
+    return nanosleep(requested_time, remaining);
+}
+
 void timeSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     clock = std::make_unique<Common::NativeClock>();
     initial_ptc = clock->GetUptime();
@@ -140,6 +145,7 @@ void timeSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("QcteRwbsnV0", "libScePosix", 1, "libkernel", 1, 1, posix_usleep);
     LIB_FUNCTION("-ZR+hG7aDHw", "libkernel", 1, "libkernel", 1, 1, sceKernelSleep);
     LIB_FUNCTION("0wu33hunNdE", "libScePosix", 1, "libkernel", 1, 1, sceKernelSleep);
+    LIB_FUNCTION("yS8U2TGCe1A", "libkernel", 1, "libkernel", 1, 1, posix_nanosleep);
 }
 
 } // namespace Libraries::Kernel

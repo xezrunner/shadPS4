@@ -301,7 +301,8 @@ void Translate(IR::Block* block, std::span<const GcnInst> inst_list, Info& info)
         case Opcode::V_MADAK_F32: // Yes these can share the opcode
             translator.V_FMA_F32(inst);
             break;
-        case Opcode::IMAGE_SAMPLE_LZ: // TODO?
+        case Opcode::IMAGE_SAMPLE_C_LZ:
+        case Opcode::IMAGE_SAMPLE_LZ:
         case Opcode::IMAGE_SAMPLE:
             translator.IMAGE_SAMPLE(inst);
             break;
