@@ -11,9 +11,11 @@ EqueueInternal::~EqueueInternal() = default;
 int EqueueInternal::addEvent(const EqueueEvent& event) {
     std::scoped_lock lock{m_mutex};
 
-    ASSERT(!event.isTriggered);
+    ASSERT(!event.IsTriggered());
 
-    // TODO check if event is already exists and return it. Currently we just add in m_events array
+    const auto& it = std::ranges::find(m_events, event);
+    ASSERT(it == m_events.cend()); // TODO: update event if found
+
     m_events.push_back(event);
     return 0;
 }
@@ -51,7 +53,7 @@ bool EqueueInternal::triggerEvent(u64 ident, s16 filter, void* trigger_data) {
 
         for (auto& event : m_events) {
             if (event.event.ident == ident) { // event filter?
-                event.trigger(trigger_data);
+                event.Trigger(trigger_data);
             }
         }
     }
@@ -64,9 +66,9 @@ int EqueueInternal::getTriggeredEvents(SceKernelEvent* ev, int num) {
     int ret = 0;
 
     for (auto& event : m_events) {
-        if (event.isTriggered) {
+        if (event.IsTriggered()) {
             ev[ret++] = event.event;
-            event.reset();
+            event.Reset();
         }
     }
 

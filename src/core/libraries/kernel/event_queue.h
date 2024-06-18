@@ -73,21 +73,31 @@ struct Filter {
 };
 
 struct EqueueEvent {
-    bool isTriggered = false;
     SceKernelEvent event;
     Filter filter;
 
-    void reset() {
-        isTriggered = false;
+    void Reset() {
+        is_triggered = false;
         event.fflags = 0;
         event.data = 0;
     }
 
-    void trigger(void* data) {
-        isTriggered = true;
+    void Trigger(void* data) {
+        is_triggered = true;
         event.fflags++;
         event.data = reinterpret_cast<uintptr_t>(data);
     }
+
+    bool IsTriggered() const {
+        return is_triggered;
+    }
+
+    bool operator==(const EqueueEvent& ev) const {
+        return ev.event.ident == event.ident;
+    }
+
+private:
+    bool is_triggered = false;
 };
 
 class EqueueInternal {

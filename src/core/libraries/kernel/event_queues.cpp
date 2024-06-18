@@ -84,7 +84,6 @@ int PS4_SYSV_ABI sceKernelAddUserEvent(SceKernelEqueue eq, int id) {
     }
 
     Kernel::EqueueEvent event{};
-    event.isTriggered = false;
     event.event.ident = id;
     event.event.filter = Kernel::EVFILT_USER;
     event.event.udata = 0;
@@ -101,7 +100,6 @@ int PS4_SYSV_ABI sceKernelAddUserEventEdge(SceKernelEqueue eq, int id) {
     }
 
     Kernel::EqueueEvent event{};
-    event.isTriggered = false;
     event.event.ident = id;
     event.event.filter = Kernel::EVFILT_USER;
     event.event.udata = 0;
