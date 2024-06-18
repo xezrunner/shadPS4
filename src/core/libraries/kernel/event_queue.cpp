@@ -52,7 +52,7 @@ bool EqueueInternal::triggerEvent(u64 ident, s16 filter, void* trigger_data) {
         std::scoped_lock lock{m_mutex};
 
         for (auto& event : m_events) {
-            if (event.event.ident == ident) { // event filter?
+            if (event.event.ident == ident && event.event.filter == filter) {
                 event.Trigger(trigger_data);
             }
         }
