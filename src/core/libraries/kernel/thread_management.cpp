@@ -1312,6 +1312,9 @@ void pthreadSymbolsRegister(Core::Loader::SymbolsResolver* sym) {
     LIB_FUNCTION("Ru36fiTtJzA", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrGetstackaddr);
     LIB_FUNCTION("-fA+7ZlGDQs", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrGetstacksize);
     LIB_FUNCTION("14bOACANTBo", "libkernel", 1, "libkernel", 1, 1, scePthreadOnce);
+    LIB_FUNCTION("F+yfmduIBB8", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetstackaddr);
+    LIB_FUNCTION("El+cQ20DynU", "libkernel", 1, "libkernel", 1, 1, scePthreadAttrSetguardsize);
+    
 
     // mutex calls
     LIB_FUNCTION("cmo1RIYva9o", "libkernel", 1, "libkernel", 1, 1, scePthreadMutexInit);
