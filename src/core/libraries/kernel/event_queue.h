@@ -107,7 +107,10 @@ public:
     void setName(const std::string& m_name) {
         this->m_name = m_name;
     }
-    int addEvent(const EqueueEvent& event);
+    const auto& GetName() const {
+        return m_name;
+    }
+    int addEvent(EqueueEvent& event);
     int removeEvent(u64 id);
     int waitForEvents(SceKernelEvent* ev, int num, u32 micros);
     bool triggerEvent(u64 ident, s16 filter, void* trigger_data);

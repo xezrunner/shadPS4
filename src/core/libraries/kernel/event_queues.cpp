@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "common/assert.h"
+#include "common/debug.h"
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
 #include "core/libraries/kernel/event_queues.h"
@@ -43,7 +44,9 @@ int PS4_SYSV_ABI sceKernelDeleteEqueue(SceKernelEqueue eq) {
 
 int PS4_SYSV_ABI sceKernelWaitEqueue(SceKernelEqueue eq, SceKernelEvent* ev, int num, int* out,
                                      SceKernelUseconds* timo) {
-    LOG_INFO(Kernel_Event, "num = {}", num);
+    HLE_TRACE;
+    TRACE_HINT(eq->GetName());
+    LOG_INFO(Kernel_Event, "equeue = {} num = {}", eq->GetName(), num);
 
     if (eq == nullptr) {
         return ORBIS_KERNEL_ERROR_EBADF;
