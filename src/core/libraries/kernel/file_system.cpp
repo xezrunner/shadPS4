@@ -32,7 +32,7 @@ int PS4_SYSV_ABI sceKernelOpen(const char* path, int flags, u16 mode) {
     bool directory = (flags & ORBIS_KERNEL_O_DIRECTORY) != 0;
 
     if (std::string_view{path} == "/dev/console" || std::string_view{path} == "/dev/deci_tty6") {
-        return ORBIS_OK;
+        return 2000;//return a high handler // TODO fix me
     }
 
     if (directory) {
@@ -68,7 +68,7 @@ int PS4_SYSV_ABI sceKernelOpen(const char* path, int flags, u16 mode) {
 }
 
 int PS4_SYSV_ABI posix_open(const char* path, int flags, /* SceKernelMode*/ u16 mode) {
-    LOG_INFO(Kernel_Fs, "posix open redirect to sceKernelOpen\n");
+    LOG_INFO(Kernel_Fs, "posix open redirect to sceKernelOpen");
     int result = sceKernelOpen(path, flags, mode);
     // Posix calls different only for their return values
     ASSERT(result >= 0);
