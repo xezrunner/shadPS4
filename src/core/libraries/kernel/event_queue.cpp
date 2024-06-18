@@ -8,15 +8,19 @@ namespace Libraries::Kernel {
 
 EqueueInternal::~EqueueInternal() = default;
 
-int EqueueInternal::addEvent(const EqueueEvent& event) {
+int EqueueInternal::addEvent(EqueueEvent& event) {
     std::scoped_lock lock{m_mutex};
 
-    ASSERT(!event.IsTriggered());
+    const auto start_clock = std::chrono::high_resolution_clock::now();
+    event.filter.added_time_us =
+        std::chrono::time_point_cast<std::chrono::microseconds>(start_clock);
 
     const auto& it = std::ranges::find(m_events, event);
-    ASSERT(it == m_events.cend()); // TODO: update event if found
-
-    m_events.push_back(event);
+    if (it != m_events.cend()) {
+        *it = event;
+    } else {
+        m_events.push_back(event);
+    }
     return 0;
 }
 

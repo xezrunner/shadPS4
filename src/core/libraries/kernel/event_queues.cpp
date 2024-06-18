@@ -113,6 +113,28 @@ int PS4_SYSV_ABI sceKernelAddUserEventEdge(SceKernelEqueue eq, int id) {
     return eq->addEvent(event);
 }
 
+s32 PS4_SYSV_ABI sceKernelAddHRTimerEvent(SceKernelEqueue eq, int id, timespec* ts, void* udata) {
+    if (eq == nullptr) {
+        return ORBIS_KERNEL_ERROR_EBADF;
+    }
+
+    if (ts->tv_sec > 100 || ts->tv_nsec < 100'000) {
+        return ORBIS_KERNEL_ERROR_EINVAL;
+    }
+    ASSERT(ts->tv_nsec > 1000); // assume 1us granularity
+    const auto total_us = ts->tv_sec * 1000'000 + ts->tv_nsec / 1000;
+
+    Kernel::EqueueEvent event{};
+    event.event.ident = id;
+    event.event.filter = Kernel::EVFILT_HRTIMER;
+    event.event.flags = 0x11;
+    event.event.fflags = 0;
+    event.event.data = total_us;
+    event.event.udata = udata;
+
+    return eq->addEvent(event);
+}
+
 void* PS4_SYSV_ABI sceKernelGetEventUserData(const SceKernelEvent* ev) {
     if (!ev) {
         return nullptr;
