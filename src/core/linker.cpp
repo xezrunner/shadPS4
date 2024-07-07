@@ -33,7 +33,7 @@ static PS4_SYSV_ABI void ProgramExitFunc() {
 }
 
 
-void GenerateTrampoline(u64 hle_handler, u64 context_base);
+void GenerateTrampoline(u64 hle_handler);
 
 __declspec(align(32)) struct Context {
     u64 gpr[16];
@@ -45,9 +45,13 @@ __declspec(align(32)) struct Context {
     u64 host_rsp;
     u64 trampoline_ret;
 };
-Context thread_context;
 
-auto gen = new Xbyak::CodeGenerator(64 * 1024 * 1024);
+typedef PS4_SYSV_ABI u64 (*jit_entry)();
+
+std::unordered_map<u64, std::function<jit_entry(u64)>> trampoline_entries;
+
+thread_local auto gen = new Xbyak::CodeGenerator(64 * 1024 * 1024);
+thread_local std::unordered_map<u64, jit_entry> translated_entries;
 
 constexpr auto rip_offs = offsetof(Context, rip);
 constexpr auto ymm_offs = offsetof(Context, ymm[0]);
@@ -56,7 +60,6 @@ constexpr auto rflags_offs = offsetof(Context, rflags);
 constexpr auto host_rsp_offs = offsetof(Context, host_rsp);
 constexpr auto trampoline_ret_offs = offsetof(Context, trampoline_ret);
 
-std::unordered_map<u64, PS4_SYSV_ABI u64 (*)()> translated_entries;
 
 void push_abi_regs() {
     using namespace Xbyak;
@@ -75,9 +78,19 @@ void pop_abi_regs() {
         gen->pop(Reg64(i));
     }
 }
-auto TranslateCode(u8* runtime_address, u64 context_base) -> PS4_SYSV_ABI u64 (*)() {
-    printf("TranslateCode: %p, ctx: %llX\n", runtime_address, context_base);
 
+extern std::map<void*, size_t> addr2module;
+
+auto TranslateCode(u8* runtime_address, u64 context_base) -> PS4_SYSV_ABI u64 (*)() {
+    LOG_INFO(Core_Linker, "[{:#010x}] TranslateCode: {}, ctx: {:#010x}", GetCurrentThreadId(), (void*)runtime_address, context_base);
+
+    { 
+        auto lower = addr2module.lower_bound(runtime_address);
+        if (lower == addr2module.end() || lower->second < (size_t)runtime_address) {
+            LOG_ERROR(Core_Linker, "[{:#010x}] TranslateCode: Running host code, aborting...", GetCurrentThreadId());
+            DebugBreak();
+        }
+    }
     using namespace Xbyak;
     using namespace Xbyak::util;
 
@@ -155,7 +168,7 @@ auto TranslateCode(u8* runtime_address, u64 context_base) -> PS4_SYSV_ABI u64 (*
         /* buffer:          */ runtime_address,
         /* length:          */ 15,
         /* instruction:     */ &instruction))) {
-        printf("%016" PRIX64 "  %s\n", (u64)runtime_address, instruction.text);
+        LOG_INFO(Core_Linker, "[{:#010x}] {:#010x} {}", GetCurrentThreadId(), (u64)runtime_address, instruction.text);
 
         auto next_address = runtime_address + instruction.info.length;
 
@@ -488,73 +501,87 @@ auto TranslateCode(u8* runtime_address, u64 context_base) -> PS4_SYSV_ABI u64 (*
     return Entry;
 }
 
-void GenerateTrampoline(u64 hle_handler, u64 context_base) {
-    printf("Generating trampoline %llX\n", hle_handler);
+void GenerateTrampoline(u64 hle_handler) {
+    LOG_INFO(Core_Linker, "Adding trampoline {:#010x}", hle_handler);
 
     using namespace Xbyak;
     using namespace Xbyak::util;
 
-    auto entry = translated_entries.find(hle_handler);
-    if (entry == translated_entries.end()) {
+    auto entry = trampoline_entries.find(hle_handler);
+    if (entry == trampoline_entries.end()) {
 
-        translated_entries[hle_handler] = gen->getCurr<PS4_SYSV_ABI u64 (*)()>();
+        trampoline_entries[hle_handler] = [hle_handler](u64 context_base) {
+            auto rv = gen->getCurr<PS4_SYSV_ABI u64 (*)()>();
 
-        push_abi_regs();
+            push_abi_regs();
 
-        gen->mov(gen->rax, context_base);
-        gen->mov(gen->qword[gen->rax + host_rsp_offs], gen->rsp);
+            gen->mov(gen->rax, context_base);
+            gen->mov(gen->qword[gen->rax + host_rsp_offs], gen->rsp);
 
-        gen->mov(rax, context_base);
+            gen->mov(rax, context_base);
 
-        // RSP
-        gen->mov(rsp, ptr[rax + rsp.getIdx() * 8]);
+            // RSP
+            gen->mov(rsp, ptr[rax + rsp.getIdx() * 8]);
 
-        // pop & store original return address
-        gen->pop(rdx);
-        gen->mov(ptr[rax + trampoline_ret_offs], rdx);
+            // pop & store original return address
+            gen->pop(rdx);
+            gen->mov(ptr[rax + trampoline_ret_offs], rdx);
 
-        // args: RDI, RSI, RDX, RCX, R8, R9
-        Reg64 args_64[] = {rdi, rsi, rdx, rcx, r8, r9};
-        for (const auto& reg : args_64) {
-            gen->mov(reg, ptr[rax + reg.getIdx() * 8]);
-        }
-        // args: XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6 and XMM7
-        for (int i = 0; i < 8; i++) {
-            gen->vmovaps(Ymm(i), ptr[rax + ymm_offs + i * ymm_size]);
-        }
+            // args: RDI, RSI, RDX, RCX, R8, R9
+            Reg64 args_64[] = {rdi, rsi, rdx, rcx, r8, r9};
+            for (const auto& reg : args_64) {
+                gen->mov(reg, ptr[rax + reg.getIdx() * 8]);
+            }
+            // args: XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6 and XMM7
+            for (int i = 0; i < 8; i++) {
+                gen->vmovaps(Ymm(i), ptr[rax + ymm_offs + i * ymm_size]);
+            }
 
-        gen->mov(rax, hle_handler);
-        gen->call(rax); // this replaces the original return address
+            gen->mov(rax, hle_handler);
+            gen->call(rax); // this replaces the original return address
 
-        // rets: RAX, RDX
-        gen->mov(rcx, rax);
-        Reg64 rets_64[] = {rcx /* rax is used as temp */, rdx};
+            // rets: RAX, RDX
+            gen->mov(rcx, rax);
+            Reg64 rets_64[] = {rcx /* rax is used as temp */, rdx};
 
-        gen->mov(rax, context_base);
-        gen->mov(ptr[rax + rax.getIdx() * 8], rets_64[0]);
-        gen->mov(ptr[rax + rets_64[1].getIdx() * 8], rets_64[1]);
+            gen->mov(rax, context_base);
+            gen->mov(ptr[rax + rax.getIdx() * 8], rets_64[0]);
+            gen->mov(ptr[rax + rets_64[1].getIdx() * 8], rets_64[1]);
 
-        // rets: XMM0
-        gen->vmovaps(ptr[rax + ymm_offs + 0 * ymm_size], Ymm(0));
+            // rets: XMM0
+            gen->vmovaps(ptr[rax + ymm_offs + 0 * ymm_size], Ymm(0));
 
-        // faux ret
-        gen->mov(gen->rax, context_base + 4 * 8);
-        gen->mov(gen->rsp, gen->qword[gen->rax]);
-        gen->pop(gen->rcx);
-        gen->mov(gen->qword[gen->rax], gen->rsp);
+            // faux ret
+            gen->mov(gen->rax, context_base + 4 * 8);
+            gen->mov(gen->rsp, gen->qword[gen->rax]);
+            gen->pop(gen->rcx);
+            gen->mov(gen->qword[gen->rax], gen->rsp);
 
-        gen->mov(gen->rax, context_base);
-        gen->mov(gen->rsp, gen->qword[gen->rax + host_rsp_offs]);
-        pop_abi_regs();
+            gen->mov(gen->rax, context_base);
+            gen->mov(gen->rsp, gen->qword[gen->rax + host_rsp_offs]);
+            pop_abi_regs();
 
-        gen->mov(gen->rax, ptr[gen->rax + trampoline_ret_offs]);
-        gen->ret();
+            gen->mov(gen->rax, ptr[gen->rax + trampoline_ret_offs]);
+            gen->ret();
+
+            return rv;
+        };
     }
 }
+
+void InstallTrampolines(Context *thread_context) {
+    for (auto&& trampoline : trampoline_entries) {
+        translated_entries[trampoline.first] = trampoline.second((u64)thread_context);
+    }
+}
+
+thread_local Context thread_context;
 
 static void RunMainEntry(VAddr addr, EntryParams* params, ExitFunc exit_func) {
     // reinterpret_cast<entry_func_t>(addr)(params, exit_func); // can't be used, stack has to have
     // a specific layout
+
+    LOG_INFO(Core_Linker, "[{:#010x}] Main thread starting {:#010x}", GetCurrentThreadId(), addr);
 
     // Allocate stack for guest thread
     auto stack_top =
@@ -583,6 +610,8 @@ static void RunMainEntry(VAddr addr, EntryParams* params, ExitFunc exit_func) {
     }
 
     thread_context.rip = addr;
+
+    InstallTrampolines(&thread_context);
 
     for (;;) {
         auto entry = translated_entries.find(thread_context.rip);
@@ -617,6 +646,46 @@ static void RunMainEntryNative(VAddr addr, EntryParams* params, ExitFunc exit_fu
                  :
                  : "r"(addr), "r"(params), "r"(exit_func)
                  : "rax", "rsi", "rdi");
+}
+
+void* RunThread(VAddr addr, void* arg) {
+    LOG_INFO(Core_Linker, "[{:#010x}] New thread starting {:#010x}, {}", GetCurrentThreadId(), addr, arg);
+
+    auto stack_top =
+        8 * 1024 * 1024 + (u64)VirtualAlloc(0, 8 * 1024 * 1024, MEM_COMMIT, PAGE_READWRITE);
+
+    {
+        auto& rsp = thread_context.gpr[4];
+        auto& rsi = thread_context.gpr[6];
+        auto& rdi = thread_context.gpr[7];
+
+        rsp = stack_top;
+        rdi = (uint64_t)arg;
+
+        rsp -= 8;
+        *(uint64_t*)rsp = 0xDEADBEEFF099EA7;
+    }
+
+    thread_context.rip = addr;
+
+    InstallTrampolines(&thread_context);
+
+    while (thread_context.rip != 0xDEADBEEFF099EA7) {
+        auto entry = translated_entries.find(thread_context.rip);
+        if (entry == translated_entries.end()) {
+            auto Entry = TranslateCode((u8*)thread_context.rip, (u64)&thread_context);
+            translated_entries[thread_context.rip] = Entry;
+            thread_context.rip = Entry();
+        } else {
+            thread_context.rip = entry->second();
+        }
+    }
+
+    auto rv = (void*)thread_context.gpr[0];
+
+    LOG_INFO(Core_Linker, "[{:#010x}] Thread Exiting with {}", GetCurrentThreadId(), rv);
+
+    return rv;
 }
 
 Linker::Linker() : memory{Memory::Instance()} {}
@@ -836,7 +905,7 @@ bool Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
     }
     if (record) {
         *return_info = *record;
-        GenerateTrampoline(return_info->virtual_address, (u64)&thread_context);
+        GenerateTrampoline(return_info->virtual_address);
         return true;
     }
 
@@ -850,7 +919,7 @@ bool Linker::Resolve(const std::string& name, Loader::SymbolType sym_type, Modul
     }
     LOG_ERROR(Core_Linker, "Linker: Stub resolved {} as {} (lib: {}, mod: {})", sr.name,
               return_info->name, library->name, module->name);
-    GenerateTrampoline(return_info->virtual_address, (u64)&thread_context);
+    GenerateTrampoline(return_info->virtual_address);
     return false;
 }
 

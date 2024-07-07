@@ -12,7 +12,11 @@
 #include "core/module.h"
 #include "core/tls.h"
 
+#include <map>
+
 namespace Core {
+
+std::map<void*, size_t> addr2module;
 
 using EntryFunc = PS4_SYSV_ABI int (*)(size_t args, const void* argp, void* param);
 
@@ -87,6 +91,8 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
     memory->MapMemory(out_addr, LoadAddress, aligned_base_size + TrampolineSize,
                       MemoryProt::CpuReadWrite, MemoryMapFlags::Fixed, VMAType::Code, name, true);
     LoadAddress += CODE_BASE_INCR * (1 + aligned_base_size / CODE_BASE_INCR);
+    
+    addr2module.emplace(*out_addr, (size_t)*out_addr + aligned_base_size + TrampolineSize);
 
     // Initialize trampoline generator.
     void* trampoline_addr = std::bit_cast<void*>(base_virtual_addr + aligned_base_size);

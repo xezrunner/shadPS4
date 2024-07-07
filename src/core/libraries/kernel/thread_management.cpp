@@ -933,7 +933,8 @@ static void* run_thread(void* arg) {
     g_pthread_self = thread;
     pthread_cleanup_push(cleanup_thread, thread);
     thread->is_started = true;
-    ret = thread->entry(thread->arg);
+    //ret = thread->entry(thread->arg);
+    ret = Core::RunThread((VAddr)thread->entry, thread->arg);
     pthread_cleanup_pop(1);
     return ret;
 }

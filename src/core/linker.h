@@ -46,6 +46,8 @@ struct EntryParams {
     const char* argv[3];
 };
 
+void* RunThread(VAddr addr, void* arg);
+
 using HeapApiFunc = PS4_SYSV_ABI void* (*)(size_t);
 
 class Linker {
