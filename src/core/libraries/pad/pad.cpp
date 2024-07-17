@@ -5,11 +5,17 @@
 #include <common/singleton.h>
 #include "common/logging/log.h"
 #include "core/libraries/error_codes.h"
+#include "core/libraries/kernel/time_management.h"
 #include "core/libraries/libs.h"
 #include "input/controller.h"
+#include "input/gamepad.h"
+#include "input/input_manager.h"
+#include "input/keyboard.h"
 #include "pad.h"
 
 namespace Libraries::Pad {
+std::unique_ptr<InputManager> controller;
+OrbisPadData oldData;
 
 int PS4_SYSV_ABI scePadClose(s32 handle) {
     LOG_ERROR(Lib_Pad, "(STUBBED) called");
@@ -174,6 +180,13 @@ int PS4_SYSV_ABI scePadGetVersionInfo() {
 }
 
 int PS4_SYSV_ABI scePadInit() {
+    bool is_keyboard = (Config::getControllerType() == 0);
+    if (is_keyboard) {
+        controller = std::unique_ptr<InputManager>(Common::Singleton<Keyboard>::Instance());
+    } else {
+        controller = std::unique_ptr<InputManager>(Common::Singleton<Gamepad>::Instance());
+    }
+    controller->Init();
     LOG_ERROR(Lib_Pad, "(STUBBED) called");
     return ORBIS_OK;
 }
@@ -239,25 +252,18 @@ int PS4_SYSV_ABI scePadOutputReport() {
 }
 
 int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
+    //LOG_ERROR(Lib_Pad, "(STUBBED) called");
+    // Temporary implementation. will be fixed and accurate later.
     std::memset(pData, 0, sizeof(OrbisPadData));
-    int connected_count = 0;
-    bool connected = false;
-    Input::State states[64];
-    auto* controller = Common::Singleton<Input::GameController>::Instance();
-    int ret_num = controller->ReadStates(states, num, &connected, &connected_count);
-
-    if (!connected) {
-        ret_num = 1;
-    }
-
-    for (int i = 0; i < ret_num; i++) {
-        pData[i].buttons = states[i].buttonsState;
-        pData[i].leftStick.x = states[i].axes[static_cast<int>(Input::Axis::LeftX)];
-        pData[i].leftStick.y = states[i].axes[static_cast<int>(Input::Axis::LeftY)];
-        pData[i].rightStick.x = states[i].axes[static_cast<int>(Input::Axis::RightX)];
-        pData[i].rightStick.y = states[i].axes[static_cast<int>(Input::Axis::RightY)];
-        pData[i].analogButtons.l2 = states[i].axes[static_cast<int>(Input::Axis::TriggerLeft)];
-        pData[i].analogButtons.r2 = states[i].axes[static_cast<int>(Input::Axis::TriggerRight)];
+    InputState state;
+    for (int i = 0; i < num; i++) {
+        pData[i].buttons = controller->getButtonState(&state);
+        pData[i].leftStick.x = state.lx;
+        pData[i].leftStick.y = state.ly;
+        pData[i].rightStick.x = state.rx;
+        pData[i].rightStick.y = state.ry;
+        pData[i].analogButtons.l2 = state.lt;
+        pData[i].analogButtons.r2 = state.rt;
         pData[i].orientation.x = 0.0f;
         pData[i].orientation.y = 0.0f;
         pData[i].orientation.z = 0.0f;
@@ -275,12 +281,22 @@ int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
         pData[i].touchData.touch[1].x = 0;
         pData[i].touchData.touch[1].y = 0;
         pData[i].touchData.touch[1].id = 2;
-        pData[i].connected = connected;
-        pData[i].timestamp = states[i].time;
-        pData[i].connectedCount = connected_count;
+        pData[i].connected = true;
+        pData[i].timestamp = Libraries::Kernel::sceKernelGetProcessTime();
+        pData[i].connectedCount = 1;
         pData[i].deviceUniqueDataLen = 0;
     }
+    // temp ugly return. will be fixed.
+    int ret_num = 0;
+    const u8* d1 = reinterpret_cast<u8*>(&pData[0]);
+    const u8* d2 = reinterpret_cast<u8*>(&oldData);
 
+    for (int j = 0; j < sizeof(OrbisPadData); j++) {
+        if (d1[j] != d2[j]) {
+            ret_num++;
+        }
+    }
+    oldData = pData[0];
     return ret_num;
 }
 
@@ -305,24 +321,20 @@ int PS4_SYSV_ABI scePadReadHistory() {
 }
 
 int PS4_SYSV_ABI scePadReadState(s32 handle, OrbisPadData* pData) {
-    auto* controller = Common::Singleton<Input::GameController>::Instance();
-
-    int connectedCount = 0;
-    bool isConnected = false;
-    Input::State state;
+    LOG_ERROR(Lib_Pad, "(STUBBED) called");
     std::memset(pData, 0, sizeof(OrbisPadData));
-    controller->ReadState(&state, &isConnected, &connectedCount);
-    pData->buttons = state.buttonsState;
-    pData->leftStick.x = state.axes[static_cast<int>(Input::Axis::LeftX)];
-    pData->leftStick.y = state.axes[static_cast<int>(Input::Axis::LeftY)];
-    pData->rightStick.x = state.axes[static_cast<int>(Input::Axis::RightX)];
-    pData->rightStick.y = state.axes[static_cast<int>(Input::Axis::RightY)];
-    pData->analogButtons.l2 = state.axes[static_cast<int>(Input::Axis::TriggerLeft)];
-    pData->analogButtons.r2 = state.axes[static_cast<int>(Input::Axis::TriggerRight)];
-    pData->orientation.x = 0;
-    pData->orientation.y = 0;
-    pData->orientation.z = 0;
-    pData->orientation.w = 0;
+    InputState state;
+    pData->buttons = controller->getButtonState(&state);
+    pData->leftStick.x = state.lx;
+    pData->leftStick.y = state.ly;
+    pData->rightStick.x = state.rx;
+    pData->rightStick.y = state.ry;
+    pData->analogButtons.l2 = state.lt;
+    pData->analogButtons.r2 = state.rt;
+    pData->orientation.x = 0.0f;
+    pData->orientation.y = 0.0f;
+    pData->orientation.z = 0.0f;
+    pData->orientation.w = 1.0f;
     pData->acceleration.x = 0.0f;
     pData->acceleration.y = 0.0f;
     pData->acceleration.z = 0.0f;
@@ -336,9 +348,9 @@ int PS4_SYSV_ABI scePadReadState(s32 handle, OrbisPadData* pData) {
     pData->touchData.touch[1].x = 0;
     pData->touchData.touch[1].y = 0;
     pData->touchData.touch[1].id = 2;
-    pData->timestamp = state.time;
-    pData->connected = true;   // isConnected; //TODO fix me proper
-    pData->connectedCount = 1; // connectedCount;
+    pData->connected = true;
+    pData->timestamp = Libraries::Kernel::sceKernelGetProcessTime();
+    pData->connectedCount = 1;
     pData->deviceUniqueDataLen = 0;
 
     return SCE_OK;
@@ -470,8 +482,14 @@ int PS4_SYSV_ABI scePadSetUserColor() {
 }
 
 int PS4_SYSV_ABI scePadSetVibration(s32 handle, const OrbisPadVibrationParam* pParam) {
-    LOG_ERROR(Lib_Pad, "(STUBBED) called");
-    return ORBIS_OK;
+    int result = 0x80920001;
+    if (pParam != nullptr) {
+        LOG_INFO(Lib_Pad, "scePadSetVibration called handle = {}", handle);
+        u16 smallFreq = (u16)(((float)pParam->smallMotor / 255.0f) * 65535.0f);
+        u16 bigFreq = (u16)(((float)pParam->largeMotor / 255.0f) * 65535.0f);
+        result = (Config::getControllerType() == 1) ? controller->GetRumble(smallFreq, bigFreq) : 0;
+    }
+    return result;
 }
 
 int PS4_SYSV_ABI scePadSetVibrationForce() {

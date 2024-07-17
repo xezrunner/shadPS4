@@ -42,6 +42,33 @@ std::vector<std::string> m_pkg_viewer;
 std::vector<std::string> m_elf_viewer;
 std::vector<std::string> m_recent_files;
 
+// Keyboard
+static std::string Up = "UP";
+static std::string Down = "DOWN";
+static std::string Left = "LEFT";
+static std::string Right = "RIGHT";
+static std::string Cross = "S";
+static std::string Triangle = "W";
+static std::string Square = "D";
+static std::string Circle = "A";
+static std::string L1 = "Q";
+static std::string R1 = "E";
+static std::string L2 = "R";
+static std::string R2 = "F";
+static std::string L3 = "LCTRL";
+static std::string R3 = "LSHIFT";
+static std::string Options = "1";
+static std::string LStickUp = "I";
+static std::string LStickDown = "K";
+static std::string LStickLeft = "J";
+static std::string LStickRight = "L";
+static std::string RStickUp = "V";
+static std::string RStickDown = "B";
+static std::string RStickLeft = "N";
+static std::string RStickRight = "M";
+std::unordered_map<std::string, std::string> keyMappings;
+static u32 controller = 0;
+
 bool isLleLibc() {
     return isLibc;
 }
@@ -100,6 +127,18 @@ bool vkValidationEnabled() {
 
 bool vkValidationSyncEnabled() {
     return vkValidationSync;
+}
+
+std::unordered_map<std::string, std::string> getKeyMap() {
+    return keyMappings;
+}
+
+void setControllerType(u32 type) {
+    controller = type;
+}
+
+u32 getControllerType() {
+    return controller;
 }
 
 void setMainWindowGeometry(u32 x, u32 y, u32 w, u32 h) {
@@ -224,6 +263,7 @@ void load(const std::filesystem::path& path) {
             logFilter = toml::find_or<toml::string>(general, "logFilter", "");
             logType = toml::find_or<toml::string>(general, "logType", "sync");
             isShowSplash = toml::find_or<toml::boolean>(general, "showSplash", true);
+            controller = toml::find_or<toml::integer>(general, "controller", 0);
         }
     }
     if (data.contains("GPU")) {
@@ -287,6 +327,35 @@ void load(const std::filesystem::path& path) {
             m_table_mode = toml::find_or<toml::integer>(gui, "gameTableMode", 0);
         }
     }
+    if (data.contains("Controller")) {
+        auto generalResult = toml::expect<toml::value>(data.at("Controller"));
+        if (generalResult.is_ok()) {
+            auto general = generalResult.unwrap();
+            keyMappings["Up"] = (toml::find_or<toml::string>(general, "Up", ""));
+            keyMappings["Down"] = (toml::find_or<toml::string>(general, "Down", ""));
+            keyMappings["Left"] = toml::find_or<toml::string>(general, "Left", "");
+            keyMappings["Right"] = toml::find_or<toml::string>(general, "Right", "");
+            keyMappings["Cross"] = toml::find_or<toml::string>(general, "Cross", "");
+            keyMappings["Triangle"] = toml::find_or<toml::string>(general, "Triangle", "");
+            keyMappings["Square"] = toml::find_or<toml::string>(general, "Square", "");
+            keyMappings["Circle"] = toml::find_or<toml::string>(general, "Circle", "");
+            keyMappings["L1"] = toml::find_or<toml::string>(general, "L1", "");
+            keyMappings["R1"] = toml::find_or<toml::string>(general, "R1", "");
+            keyMappings["L2"] = toml::find_or<toml::string>(general, "L2", "");
+            keyMappings["R2"] = toml::find_or<toml::string>(general, "R2", "");
+            keyMappings["L3"] = toml::find_or<toml::string>(general, "L3", "");
+            keyMappings["R3"] = toml::find_or<toml::string>(general, "R3", "");
+            keyMappings["Options"] = toml::find_or<toml::string>(general, "Options", "");
+            keyMappings["LStickUp"] = toml::find_or<toml::string>(general, "LStickUp", "");
+            keyMappings["LStickDown"] = toml::find_or<toml::string>(general, "LStickDown", "");
+            keyMappings["LStickLeft"] = toml::find_or<toml::string>(general, "LStickLeft", "");
+            keyMappings["LStickRight"] = toml::find_or<toml::string>(general, "LStickRight", "");
+            keyMappings["RStickUp"] = toml::find_or<toml::string>(general, "RStickUp", "");
+            keyMappings["RStickDown"] = toml::find_or<toml::string>(general, "RStickDown", "");
+            keyMappings["RStickLeft"] = toml::find_or<toml::string>(general, "RStickLeft", "");
+            keyMappings["RStickRight"] = toml::find_or<toml::string>(general, "RStickRight", "");
+        }
+    }
 }
 void save(const std::filesystem::path& path) {
     toml::basic_value<toml::preserve_comments> data;
@@ -338,6 +407,29 @@ void save(const std::filesystem::path& path) {
     data["GUI"]["pkgDirs"] = m_pkg_viewer;
     data["GUI"]["elfDirs"] = m_elf_viewer;
     data["GUI"]["recentFiles"] = m_recent_files;
+    data["Controller"]["Up"] = Up;
+    data["Controller"]["Down"] = Down;
+    data["Controller"]["Left"] = Left;
+    data["Controller"]["Right"] = Right;
+    data["Controller"]["Cross"] = Cross;
+    data["Controller"]["Triangle"] = Triangle;
+    data["Controller"]["Square"] = Square;
+    data["Controller"]["Circle"] = Circle;
+    data["Controller"]["L1"] = L1;
+    data["Controller"]["R1"] = R1;
+    data["Controller"]["L2"] = L2;
+    data["Controller"]["R2"] = R2;
+    data["Controller"]["L3"] = L3;
+    data["Controller"]["R3"] = R3;
+    data["Controller"]["Options"] = Options;
+    data["Controller"]["LStickUp"] = LStickUp;
+    data["Controller"]["LStickDown"] = LStickDown;
+    data["Controller"]["LStickLeft"] = LStickLeft;
+    data["Controller"]["LStickRight"] = LStickRight;
+    data["Controller"]["RStickUp"] = RStickUp;
+    data["Controller"]["RStickDown"] = RStickDown;
+    data["Controller"]["RStickLeft"] = RStickLeft;
+    data["Controller"]["RStickRight"] = RStickRight;
 
     std::ofstream file(path, std::ios::out);
     file << data;

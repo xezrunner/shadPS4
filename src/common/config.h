@@ -4,6 +4,7 @@
 #pragma once
 
 #include <filesystem>
+#include <unordered_map>
 #include <vector>
 #include "types.h"
 
@@ -29,6 +30,11 @@ bool dumpPM4();
 
 bool vkValidationEnabled();
 bool vkValidationSyncEnabled();
+
+// Controllers
+std::unordered_map<std::string, std::string> getKeyMap();
+void setControllerType(u32 type);
+u32 getControllerType();
 
 // Gui
 void setMainWindowGeometry(u32 x, u32 y, u32 w, u32 h);
