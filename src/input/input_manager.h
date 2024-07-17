@@ -15,6 +15,6 @@ public:
 
     virtual u32 getButtonState(InputState* state) = 0;
     virtual void getAxis(InputState* state) = 0;
-    virtual void Init() = 0;    
+    virtual void Init() = 0;
     virtual int GetRumble(u16 smallFreq, u16 bigFreq) = 0;
 };
