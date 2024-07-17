@@ -381,6 +381,7 @@ void save(const std::filesystem::path& path) {
     data["General"]["logFilter"] = logFilter;
     data["General"]["logType"] = logType;
     data["General"]["showSplash"] = isShowSplash;
+    data["General"]["controller"] = controller;
     data["GPU"]["gpuId"] = gpuId;
     data["GPU"]["screenWidth"] = screenWidth;
     data["GPU"]["screenHeight"] = screenHeight;
