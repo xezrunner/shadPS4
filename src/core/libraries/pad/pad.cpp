@@ -252,8 +252,8 @@ int PS4_SYSV_ABI scePadOutputReport() {
 }
 
 int PS4_SYSV_ABI scePadRead(s32 handle, OrbisPadData* pData, s32 num) {
-    //LOG_ERROR(Lib_Pad, "(STUBBED) called");
-    // Temporary implementation. will be fixed and accurate later.
+    // LOG_ERROR(Lib_Pad, "(STUBBED) called");
+    //  Temporary implementation. will be fixed and accurate later.
     std::memset(pData, 0, sizeof(OrbisPadData));
     InputState state;
     for (int i = 0; i < num; i++) {
