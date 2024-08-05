@@ -8,6 +8,7 @@
 #include <fmt/ranges.h>
 
 #include "common/assert.h"
+#include "common/config.h"
 #include "sdl_window.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
@@ -206,6 +207,9 @@ bool Instance::CreateDevice() {
     color_write_en &= add_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
     const bool calibrated_timestamps = add_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
     const bool robustness = add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
+    has_nv_checkpoints = Config::isMarkersEnabled()
+                             ? add_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)
+                             : false;
 
     // These extensions are promoted by Vulkan 1.3, but for greater compatibility we use Vulkan 1.2
     // with extensions.
