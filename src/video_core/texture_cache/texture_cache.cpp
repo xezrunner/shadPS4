@@ -101,7 +101,6 @@ ImageId TextureCache::ResolveOverlap(const ImageInfo& image_info, ImageId cache_
         if (image_info.IsMipOf(tex_cache_image.info)) {
             UNREACHABLE();
         }
-        return cache_image_id;
     } else {
         // Left overlap, the image from cache is a possible subresource of the image requested
         if (!merged_image_id) {
