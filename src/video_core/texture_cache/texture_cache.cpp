@@ -93,9 +93,15 @@ ImageId TextureCache::ResolveOverlap(const ImageInfo& image_info, ImageId cache_
         if (image_info.IsMipOf(tex_cache_image.info)) {
             UNREACHABLE();
         }
+        return cache_image_id;
     } else {
         // Left overlap, the image from cache is a possible subresource of the image requested
-        if (image_info.resources.levels > tex_cache_image.info.resources.levels) { // mips
+        if (!merged_image_id) {
+            // We need to have a larger, already allocated image to copy this one into
+            return {};
+        }
+
+        if (tex_cache_image.info.IsMipOf(image_info)) {
             auto& merged_image = slot_images[merged_image_id];
             tex_cache_image.Transit(vk::ImageLayout::eTransferSrcOptimal,
                                     vk::AccessFlagBits::eTransferRead);
@@ -107,6 +113,10 @@ ImageId TextureCache::ResolveOverlap(const ImageInfo& image_info, ImageId cache_
             tex_cache_image.flags |= ImageFlagBits::Deleted;
             UntrackImage(tex_cache_image, cache_image_id);
             scheduler.DeferOperation([this, cache_image_id]() { UnregisterImage(cache_image_id); });
+        }
+
+        if (tex_cache_image.info.IsSliceOf(image_info)) {
+            UNREACHABLE();
         }
     }
 
