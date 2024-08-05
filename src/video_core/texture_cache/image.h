@@ -115,6 +115,7 @@ struct Image {
     vk::Flags<vk::PipelineStageFlagBits> pl_stage = vk::PipelineStageFlagBits::eAllCommands;
     vk::Flags<vk::AccessFlagBits> access_mask = vk::AccessFlagBits::eNone;
     vk::ImageLayout layout = vk::ImageLayout::eUndefined;
+    u64 tick_accessed_last{0};
 };
 
 } // namespace VideoCore

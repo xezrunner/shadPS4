@@ -13,6 +13,7 @@ namespace VideoCore {
 
 static constexpr u64 StreamBufferSize = 512_MB;
 static constexpr u64 PageShift = 12;
+static constexpr u64 NumFramesBeforeRemoval = 32;
 
 TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
                            BufferCache& buffer_cache_, PageManager& tracker_)
@@ -63,9 +64,16 @@ ImageId TextureCache::ResolveOverlap(const ImageInfo& image_info, ImageId cache_
 
     if (image_info.guest_address == tex_cache_image.info.guest_address) { // Equal address
         if (image_info.size != tex_cache_image.info.size) {
-            // Very likely this kind of overlap is caused by allocation from a pool. As future
-            // optimization, we can schedule unaccessed cache image deletion after some number of
-            // frames passed.
+            // Very likely this kind of overlap is caused by allocation from a pool. We can assume
+            // it is safe to delete the image if it wasn't accessed in some amount of frames.
+            if (scheduler.CurrentTick() - tex_cache_image.tick_accessed_last >
+                NumFramesBeforeRemoval) {
+
+                tex_cache_image.flags |= ImageFlagBits::Deleted;
+                UntrackImage(tex_cache_image, cache_image_id);
+                scheduler.DeferOperation(
+                    [this, cache_image_id]() { UnregisterImage(cache_image_id); });
+            }
             return merged_image_id;
         }
 
@@ -102,12 +110,13 @@ ImageId TextureCache::ResolveOverlap(const ImageInfo& image_info, ImageId cache_
         }
 
         if (tex_cache_image.info.IsMipOf(image_info)) {
-            auto& merged_image = slot_images[merged_image_id];
             tex_cache_image.Transit(vk::ImageLayout::eTransferSrcOptimal,
                                     vk::AccessFlagBits::eTransferRead);
 
             const auto num_mips_to_copy = tex_cache_image.info.resources.levels;
             ASSERT(num_mips_to_copy == 1);
+
+            auto& merged_image = slot_images[merged_image_id];
             merged_image.CopyMip(tex_cache_image, image_info.resources.levels - 1);
 
             tex_cache_image.flags |= ImageFlagBits::Deleted;
@@ -205,6 +214,8 @@ ImageId TextureCache::FindImage(const ImageInfo& info, bool skip_refresh) {
     if (!skip_refresh) {
         UpdateImage(image_id);
     }
+
+    slot_images[image_id].tick_accessed_last = scheduler.CurrentTick();
 
     return image_id;
 }
