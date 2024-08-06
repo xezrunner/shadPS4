@@ -207,9 +207,6 @@ bool Instance::CreateDevice() {
     color_write_en &= add_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
     const bool calibrated_timestamps = add_extension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
     const bool robustness = add_extension(VK_EXT_ROBUSTNESS_2_EXTENSION_NAME);
-    has_nv_checkpoints = Config::isMarkersEnabled()
-                             ? add_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)
-                             : false;
 
     // These extensions are promoted by Vulkan 1.3, but for greater compatibility we use Vulkan 1.2
     // with extensions.
@@ -217,6 +214,13 @@ bool Instance::CreateDevice() {
     add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
     add_extension(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
     add_extension(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+    const bool has_sync2 = add_extension(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+
+    if (has_sync2) {
+        has_nv_checkpoints = Config::isMarkersEnabled()
+                                 ? add_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)
+                                 : false;
+    }
 
     const auto family_properties = physical_device.getQueueFamilyProperties();
     if (family_properties.empty()) {
@@ -311,6 +315,9 @@ bool Instance::CreateDevice() {
         },
         vk::PhysicalDeviceRobustness2FeaturesEXT{
             .nullDescriptor = true,
+        },
+        vk::PhysicalDeviceSynchronization2Features{
+            .synchronization2 = has_sync2,
         },
     };
 

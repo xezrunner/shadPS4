@@ -308,9 +308,9 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             if (rasterizer) {
                 const auto cmd_address = reinterpret_cast<const void*>(header);
                 rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndex2", cmd_address));
+                rasterizer->Breadcrumb(u64(cmd_address));
                 rasterizer->Draw(true);
                 rasterizer->ScopeMarkerEnd();
-                rasterizer->Breadcrumb(u64(cmd_address));
             }
             break;
         }
@@ -322,9 +322,9 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             if (rasterizer) {
                 const auto cmd_address = reinterpret_cast<const void*>(header);
                 rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndexOffset2", cmd_address));
+                rasterizer->Breadcrumb(u64(cmd_address));
                 rasterizer->Draw(true, draw_index_off->index_offset);
                 rasterizer->ScopeMarkerEnd();
-                rasterizer->Breadcrumb(u64(cmd_address));
             }
             break;
         }
@@ -335,9 +335,9 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             if (rasterizer) {
                 const auto cmd_address = reinterpret_cast<const void*>(header);
                 rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:DrawIndexAuto", cmd_address));
+                rasterizer->Breadcrumb(u64(cmd_address));
                 rasterizer->Draw(false);
                 rasterizer->ScopeMarkerEnd();
-                rasterizer->Breadcrumb(u64(cmd_address));
             }
             break;
         }
@@ -350,9 +350,9 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             if (rasterizer && (regs.cs_program.dispatch_initiator & 1)) {
                 const auto cmd_address = reinterpret_cast<const void*>(header);
                 rasterizer->ScopeMarkerBegin(fmt::format("dcb:{}:Dispatch", cmd_address));
+                rasterizer->Breadcrumb(u64(cmd_address));
                 rasterizer->DispatchDirect();
                 rasterizer->ScopeMarkerEnd();
-                rasterizer->Breadcrumb(u64(cmd_address));
             }
             break;
         }
@@ -503,9 +503,9 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, int vqid) {
             if (rasterizer && (regs.cs_program.dispatch_initiator & 1)) {
                 const auto cmd_address = reinterpret_cast<const void*>(header);
                 rasterizer->ScopeMarkerBegin(fmt::format("acb[{}]:{}:Dispatch", vqid, cmd_address));
+                rasterizer->Breadcrumb(u64(cmd_address));
                 rasterizer->DispatchDirect();
                 rasterizer->ScopeMarkerEnd();
-                rasterizer->Breadcrumb(u64(cmd_address));
             }
             break;
         }
