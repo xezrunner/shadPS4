@@ -93,14 +93,8 @@ ImageId TextureCache::ResolveOverlap(const ImageInfo& image_info, ImageId cache_
     }
 
     // Right overlap, the requested image is a possible subresource of the image from cache.
-    // Should be handled by view. No additional actions needed, just sanity check.
     if (image_info.guest_address > tex_cache_image.info.guest_address) {
-        if (image_info.IsSliceOf(tex_cache_image.info)) {
-            UNREACHABLE();
-        }
-        if (image_info.IsMipOf(tex_cache_image.info)) {
-            UNREACHABLE();
-        }
+        // Should be handled by view. No additional actions needed.
     } else {
         // Left overlap, the image from cache is a possible subresource of the image requested
         if (!merged_image_id) {
