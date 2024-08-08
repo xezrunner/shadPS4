@@ -72,7 +72,7 @@ public:
         }
 
         RefreshImage(image, custom_scheduler);
-        TrackImage(image, image_id);
+        TrackImage(image_id);
     }
 
     /// Reuploads image contents.
@@ -174,13 +174,19 @@ private:
     void UnregisterImage(ImageId image);
 
     /// Track CPU reads and writes for image
-    void TrackImage(Image& image, ImageId image_id);
+    void TrackImage(ImageId image_id);
 
     /// Stop tracking CPU reads and writes for image
-    void UntrackImage(Image& image, ImageId image_id);
+    void UntrackImage(ImageId image_id);
 
     /// Removes the image and any views/surface metas that reference it.
     void DeleteImage(ImageId image_id);
+
+    void FreeImage(ImageId image_id) {
+        UntrackImage(image_id);
+        UnregisterImage(image_id);
+        DeleteImage(image_id);
+    }
 
 private:
     const Vulkan::Instance& instance;
