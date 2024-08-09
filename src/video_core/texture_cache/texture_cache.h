@@ -44,7 +44,7 @@ public:
     void UnmapMemory(VAddr cpu_addr, size_t size);
 
     /// Retrieves the image handle of the image with the provided attributes.
-    [[nodiscard]] ImageId FindImage(const ImageInfo& info, bool skip_refresh = false);
+    [[nodiscard]] ImageId FindImage(const ImageInfo& info);
 
     /// Retrieves an image view with the properties of the specified image descriptor.
     [[nodiscard]] ImageView& FindTexture(const ImageInfo& image_info,

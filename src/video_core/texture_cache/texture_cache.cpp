@@ -133,7 +133,7 @@ ImageId TextureCache::ExpandImage(const ImageInfo& info, ImageId image_id) {
     return new_image_id;
 }
 
-ImageId TextureCache::FindImage(const ImageInfo& info, bool skip_refresh) {
+ImageId TextureCache::FindImage(const ImageInfo& info) {
     if (info.guest_address == 0) [[unlikely]] {
         return NULL_IMAGE_VIEW_ID;
     }
@@ -191,10 +191,6 @@ ImageId TextureCache::FindImage(const ImageInfo& info, bool skip_refresh) {
         RegisterImage(image_id);
     }
 
-    if (!skip_refresh) {
-        UpdateImage(image_id);
-    }
-
     slot_images[image_id].tick_accessed_last = scheduler.CurrentTick();
 
     return image_id;
@@ -223,6 +219,7 @@ ImageView& TextureCache::RegisterImageView(ImageId image_id, const ImageViewInfo
 
 ImageView& TextureCache::FindTexture(const ImageInfo& info, const ImageViewInfo& view_info) {
     const ImageId image_id = FindImage(info);
+    UpdateImage(image_id);
     Image& image = slot_images[image_id];
     auto& usage = image.info.usage;
 
@@ -245,7 +242,8 @@ ImageView& TextureCache::FindRenderTarget(const ImageInfo& image_info,
                                           const ImageViewInfo& view_info) {
     const ImageId image_id = FindImage(image_info);
     Image& image = slot_images[image_id];
-    image.flags &= ~ImageFlagBits::CpuModified;
+    image.flags |= ImageFlagBits::GpuModified;
+    UpdateImage(image_id);
 
     image.Transit(vk::ImageLayout::eColorAttachmentOptimal,
                   vk::AccessFlagBits::eColorAttachmentWrite |
@@ -278,8 +276,9 @@ ImageView& TextureCache::FindRenderTarget(const ImageInfo& image_info,
 
 ImageView& TextureCache::FindDepthTarget(const ImageInfo& image_info,
                                          const ImageViewInfo& view_info) {
-    const ImageId image_id = FindImage(image_info, true);
+    const ImageId image_id = FindImage(image_info);
     Image& image = slot_images[image_id];
+    image.flags |= ImageFlagBits::GpuModified;
     image.flags &= ~ImageFlagBits::CpuModified;
 
     const auto new_layout = view_info.is_storage ? vk::ImageLayout::eDepthStencilAttachmentOptimal
@@ -308,23 +307,6 @@ void TextureCache::RefreshImage(Image& image, Vulkan::Scheduler* custom_schedule
     // Mark image as validated.
     image.flags &= ~ImageFlagBits::CpuModified;
 
-    auto* sched_ptr = custom_scheduler ? custom_scheduler : &scheduler;
-    sched_ptr->EndRendering();
-
-    const auto cmdbuf = sched_ptr->CommandBuffer();
-    image.Transit(vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite, cmdbuf);
-
-    vk::Buffer buffer{staging.Handle()};
-    u32 offset{0};
-
-    auto upload_buffer = tile_manager.TryDetile(image);
-    if (upload_buffer) {
-        buffer = *upload_buffer;
-    } else {
-        // Upload data to the staging buffer.
-        offset = staging.Copy(image.info.guest_address, image.info.guest_size_bytes, 16);
-    }
-
     const auto& num_layers = image.info.resources.layers;
     const auto& num_mips = image.info.resources.levels;
     ASSERT(num_mips == image.info.mips_layout.size());
@@ -335,21 +317,53 @@ void TextureCache::RefreshImage(Image& image, Vulkan::Scheduler* custom_schedule
         const u32 height = std::max(image.info.size.height >> m, 1u);
         const u32 depth =
             image.info.props.is_volume ? std::max(image.info.size.depth >> m, 1u) : 1u;
-        const auto& [_, mip_pitch, mip_height, mip_ofs] = image.info.mips_layout[m];
+        const auto& [mip_size, mip_pitch, mip_height, mip_ofs] = image.info.mips_layout[m];
+
+        // Protect GPU modified resources from accidental reuploads.
+        if (True(image.flags & ImageFlagBits::GpuModified)) {
+            const u8* addr = std::bit_cast<u8*>(image.info.guest_address);
+            const u64 hash = XXH3_64bits(addr + mip_ofs, mip_size);
+            if (image.mip_hashes[m] == hash) {
+                continue;
+            }
+            image.mip_hashes[m] = hash;
+        }
 
         image_copy.push_back({
-            .bufferOffset = offset + mip_ofs * num_layers,
-            .bufferRowLength = static_cast<uint32_t>(mip_pitch),
-            .bufferImageHeight = static_cast<uint32_t>(mip_height),
+            .bufferOffset = mip_ofs * num_layers,
+            .bufferRowLength = static_cast<u32>(mip_pitch),
+            .bufferImageHeight = static_cast<u32>(mip_height),
             .imageSubresource{
-                .aspectMask = vk::ImageAspectFlagBits::eColor,
-                .mipLevel = m,
-                .baseArrayLayer = 0,
-                .layerCount = num_layers,
+              .aspectMask = vk::ImageAspectFlagBits::eColor,
+              .mipLevel = m,
+              .baseArrayLayer = 0,
+              .layerCount = num_layers,
             },
             .imageOffset = {0, 0, 0},
             .imageExtent = {width, height, depth},
         });
+    }
+
+    if (image_copy.empty()) {
+        return;
+    }
+
+    auto* sched_ptr = custom_scheduler ? custom_scheduler : &scheduler;
+    sched_ptr->EndRendering();
+
+    const auto cmdbuf = sched_ptr->CommandBuffer();
+    image.Transit(vk::ImageLayout::eTransferDstOptimal, vk::AccessFlagBits::eTransferWrite, cmdbuf);
+
+    vk::Buffer buffer{staging.Handle()};
+    u32 offset{0};
+    if (auto upload_buffer = tile_manager.TryDetile(image); upload_buffer) {
+        buffer = *upload_buffer;
+    } else {
+        offset = staging.Copy(image.info.guest_address, image.info.guest_size_bytes, 16);
+    }
+
+    for (auto& copy : image_copy) {
+        copy.bufferOffset += offset;
     }
 
     cmdbuf.copyBufferToImage(buffer, image.image, vk::ImageLayout::eTransferDstOptimal, image_copy);
