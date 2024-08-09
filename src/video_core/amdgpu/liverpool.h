@@ -11,10 +11,12 @@
 #include <span>
 #include <thread>
 #include <queue>
+
 #include "common/assert.h"
 #include "common/bit_field.h"
 #include "common/polyfill_thread.h"
 #include "common/types.h"
+#include "common/unique_function.h"
 #include "video_core/amdgpu/pixel_format.h"
 #include "video_core/amdgpu/resource.h"
 
@@ -994,11 +996,6 @@ struct Liverpool {
     std::array<CbDbExtent, NumColorBuffers> last_cb_extent{};
     CbDbExtent last_db_extent{};
 
-    enum class GpuThreadCommand : u32 {
-        Nop,       /// Do nothing, just wake up the thread.
-        FlipRelay, /// Flush the scheduler and issue a flip request to VideoOut driver
-    };
-
 public:
     Liverpool();
     ~Liverpool();
@@ -1029,9 +1026,9 @@ public:
         rasterizer = rasterizer_;
     }
 
-    void SendCommand(GpuThreadCommand cmd) {
+    void SendCommand(Common::UniqueFunction<void>&& func) {
         std::scoped_lock lk{submit_mutex};
-        command_queue.push(cmd);
+        command_queue.emplace(std::move(func));
         ++num_commands;
         submit_cv.notify_one();
     }
@@ -1108,7 +1105,7 @@ private:
     std::atomic<bool> submit_done{};
     std::mutex submit_mutex;
     std::condition_variable_any submit_cv;
-    std::queue<GpuThreadCommand> command_queue{};
+    std::queue<Common::UniqueFunction<void>> command_queue{};
 };
 
 static_assert(GFX6_3D_REG_INDEX(ps_program) == 0x2C08);

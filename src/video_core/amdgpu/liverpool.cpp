@@ -50,26 +50,14 @@ void Liverpool::Process(std::stop_token stoken) {
             // Process incoming commands with high priority
             while (num_commands) {
 
-                GpuThreadCommand cmd{};
+                Common::UniqueFunction<void> callback{};
                 {
                     std::unique_lock lk{submit_mutex};
-                    cmd = command_queue.back();
+                    callback = std::move(command_queue.back());
                     command_queue.pop();
                 }
 
-                switch (cmd) {
-                case GpuThreadCommand::Nop: {
-                    break;
-                }
-                case GpuThreadCommand::FlipRelay: {
-                    rasterizer->Flush();
-                    Platform::IrqC::Instance()->Signal(Platform::InterruptId::GfxFlip);
-                    break;
-                }
-                default: {
-                    UNREACHABLE();
-                }
-                }
+                callback();
 
                 --num_commands;
             }

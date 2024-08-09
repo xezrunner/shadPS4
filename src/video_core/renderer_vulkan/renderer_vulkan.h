@@ -76,6 +76,11 @@ public:
     void Present(Frame* frame);
     void RecreateFrame(Frame* frame, u32 width, u32 height);
 
+    void FlushDraw() {
+        SubmitInfo info{};
+        draw_scheduler.Flush(info);
+    }
+
 private:
     Frame* PrepareFrameInternal(VideoCore::Image& image, bool is_eop = true);
     Frame* GetRenderFrame();
