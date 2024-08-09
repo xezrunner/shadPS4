@@ -10,6 +10,7 @@ namespace Input {
 GameController::GameController() {
     m_states_num = 0;
     m_last_state = State();
+    m_device = std::make_unique<SDLKeyboard>();
 }
 
 void GameController::ReadState(State* state, bool* isConnected, int* connectedCount) {

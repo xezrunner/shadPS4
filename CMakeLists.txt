@@ -511,6 +511,8 @@ set(VIDEO_CORE src/video_core/amdgpu/liverpool.cpp
 
 set(INPUT src/input/controller.cpp
           src/input/controller.h
+          src/input/devices/devices.h
+          src/input/devices/sdl_keyboard.cpp
 )
 
 set(EMULATOR src/emulator.cpp

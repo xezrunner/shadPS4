@@ -5,6 +5,7 @@
 
 #include <mutex>
 #include "common/types.h"
+#include "devices/devices.h"
 
 namespace Input {
 
@@ -57,6 +58,7 @@ private:
     u32 m_first_state = 0;
     std::array<State, MAX_STATES> m_states;
     std::array<StateInternal, MAX_STATES> m_private;
+    std::unique_ptr<InputDevices> m_device;
 };
 
 } // namespace Input
