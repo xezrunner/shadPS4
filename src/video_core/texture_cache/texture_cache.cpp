@@ -33,9 +33,12 @@ TextureCache::TextureCache(const Vulkan::Instance& instance_, Vulkan::Scheduler&
 
 TextureCache::~TextureCache() = default;
 
-void TextureCache::InvalidateMemory(VAddr address, size_t size) {
+void TextureCache::InvalidateMemory(VAddr address, size_t size, bool from_compute) {
     std::unique_lock lock{mutex};
     ForEachImageInRegion(address, size, [&](ImageId image_id, Image& image) {
+        if (from_compute && !image.Overlaps(address, size)) {
+            return;
+        }
         // Ensure image is reuploaded when accessed again.
         image.flags |= ImageFlagBits::CpuModified;
         // Untrack image, so the range is unprotected and the guest can write freely.
@@ -143,8 +146,7 @@ ImageId TextureCache::FindImage(const ImageInfo& info) {
     boost::container::small_vector<ImageId, 8> image_ids;
     ForEachImageInRegion(
         info.guest_address, info.guest_size_bytes, [&](ImageId image_id, Image& image) {
-            // Ignore images scheduled for deletion
-            if (True(image.flags & ImageFlagBits::Deleted)) {
+            if (!image.Overlaps(info.guest_address, info.guest_size_bytes)) {
                 return;
             }
 
@@ -170,6 +172,11 @@ ImageId TextureCache::FindImage(const ImageInfo& info) {
         if (cache_image.info.guest_address == info.guest_address &&
             cache_image.info.guest_size_bytes == info.guest_size_bytes &&
             cache_image.info.size == info.size) {
+
+            if (cache_image.info.pixel_format == vk::Format::eR32Sfloat &&
+                info.pixel_format == vk::Format::eD32SfloatS8Uint) {
+                continue;
+            }
 
             ASSERT(cache_image.info.type == info.type);
             ASSERT(cache_image.info.num_bits == info.num_bits);

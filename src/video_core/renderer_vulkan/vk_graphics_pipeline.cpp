@@ -354,6 +354,9 @@ void GraphicsPipeline::BindResources(const Liverpool::Regs& regs,
                     LOG_WARNING(Render_Vulkan, "Unexpected metadata read by a PS shader (buffer)");
                 }
                 const u32 size = vsharp.GetSize();
+                if (buffer.is_written) {
+                    texture_cache.InvalidateMemory(address, size, true);
+                }
                 const u32 alignment = buffer.is_storage ? instance.StorageMinAlignment()
                                                         : instance.UniformMinAlignment();
                 const auto [vk_buffer, offset] =

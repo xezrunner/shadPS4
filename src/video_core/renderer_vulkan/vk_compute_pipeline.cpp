@@ -115,7 +115,7 @@ bool ComputePipeline::BindResources(VideoCore::BufferCache& buffer_cache,
         }
         const u32 size = vsharp.GetSize();
         if (buffer.is_written) {
-            texture_cache.InvalidateMemory(address, size);
+            texture_cache.InvalidateMemory(address, size, true);
         }
         const u32 alignment =
             buffer.is_storage ? instance.StorageMinAlignment() : instance.UniformMinAlignment();

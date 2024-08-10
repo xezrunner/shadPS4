@@ -293,7 +293,9 @@ bool BufferCache::IsRegionCpuModified(VAddr addr, size_t size) {
 }
 
 bool BufferCache::IsRegionGpuModified(VAddr addr, size_t size) {
-    return memory_tracker.IsRegionGpuModified(addr, size);
+    bool is_dirty = false;
+    gpu_modified_regions.ForEachInRange(addr, size, [&](VAddr, VAddr) { is_dirty = true; });
+    return is_dirty;
 }
 
 BufferId BufferCache::FindBuffer(VAddr device_addr, u32 size) {

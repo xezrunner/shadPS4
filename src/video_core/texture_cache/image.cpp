@@ -156,8 +156,8 @@ Image::Image(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
     };
 
     image.Create(image_ci);
-    if (Config::isMarkersEnabled()) {
-        Vulkan::SetObjectName(instance->GetDevice(), (vk::Image)image, "img {:#x}:{:#x}",
+    if (instance->HasDebuggingToolAttached()) {
+        Vulkan::SetObjectName(instance->GetDevice(), (vk::Image)image, "Image {:#x}:{:#x}",
                               info.guest_address, info.guest_size_bytes);
     }
 }
