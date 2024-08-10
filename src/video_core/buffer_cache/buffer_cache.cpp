@@ -9,6 +9,7 @@
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/buffer_cache/buffer_cache.h"
 #include "video_core/renderer_vulkan/liverpool_to_vk.h"
+#include "video_core/renderer_vulkan/liverpool_to_vk.h"
 #include "video_core/renderer_vulkan/vk_instance.h"
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 
@@ -119,6 +120,8 @@ bool BufferCache::BindVertexBuffers(const Shader::Info& vs_info) {
     // Calculate buffers memory overlaps
     bool has_step_rate = false;
     boost::container::static_vector<BufferRange, NUM_VERTEX_BUFFERS> ranges{};
+    boost::container::small_vector<vk::VertexInputAttributeDescription2EXT, 16> attributes;
+    boost::container::small_vector<vk::VertexInputBindingDescription2EXT, 16> bindings;
     for (const auto& input : vs_info.vs_inputs) {
         if (input.instance_step_rate == Shader::Info::VsInput::InstanceIdType::OverStepRate0 ||
             input.instance_step_rate == Shader::Info::VsInput::InstanceIdType::OverStepRate1) {
@@ -132,6 +135,20 @@ bool BufferCache::BindVertexBuffers(const Shader::Info& vs_info) {
         }
         guest_buffers.emplace_back(buffer);
         ranges.emplace_back(buffer.base_address, buffer.base_address + buffer.GetSize());
+        attributes.push_back({
+            .location = input.binding,
+            .binding = input.binding,
+            .format = Vulkan::LiverpoolToVK::SurfaceFormat(buffer.GetDataFmt(), buffer.GetNumberFmt()),
+            .offset = 0,
+        });
+        bindings.push_back({
+            .binding = input.binding,
+            .stride = buffer.GetStride(),
+            .inputRate = input.instance_step_rate == Shader::Info::VsInput::None
+                             ? vk::VertexInputRate::eVertex
+                             : vk::VertexInputRate::eInstance,
+            .divisor = 1,
+        });
     }
 
     std::ranges::sort(ranges, [](const BufferRange& lhv, const BufferRange& rhv) {
@@ -169,8 +186,11 @@ bool BufferCache::BindVertexBuffers(const Shader::Info& vs_info) {
         host_offsets[i] = host_buffer->offset + buffer.base_address - host_buffer->base_address;
     }
 
+    const auto cmdbuf = scheduler.CommandBuffer();
+    if (instance.IsVertexInputDynamicState()) {
+        cmdbuf.setVertexInputEXT(bindings, attributes);
+    }
     if (num_buffers > 0) {
-        const auto cmdbuf = scheduler.CommandBuffer();
         cmdbuf.bindVertexBuffers(0, num_buffers, host_buffers.data(), host_offsets.data());
     }
 
