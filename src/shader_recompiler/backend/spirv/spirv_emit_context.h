@@ -40,7 +40,7 @@ public:
     ~EmitContext();
 
     Id Def(const IR::Value& value);
-    Id GetBufferOffset(u32 binding);
+    void DefineBufferOffsets();
 
     [[nodiscard]] Id DefineInput(Id type, u32 location) {
         const Id input_id{DefineVar(type, spv::StorageClass::Input)};
@@ -204,7 +204,7 @@ public:
         Id id;
         Id offset;
         Id offset_dwords;
-        u32 global_binding;
+        u32 binding;
         const VectorIds* data_types;
         Id pointer_type;
         AmdGpu::DataFormat dmft;
