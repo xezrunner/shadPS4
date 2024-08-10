@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
-#pragma clang optimize off
+
 #include <algorithm>
 #include <xxhash.h>
 #include "common/alignment.h"
@@ -463,8 +463,10 @@ bool BufferCache::SynchronizeBuffer(Buffer& buffer, VAddr device_addr, u32 size)
     const auto add_copy_checked = [&](VAddr region_addr, size_t size, u64 hash) {
         const u8* addr = std::bit_cast<const u8*>(region_addr);
         const u64 new_hash = XXH3_64bits(addr, size);
-        LOG_WARNING(Render_Vulkan, "Checking gpu region addr = {:#x}, size = {:#x}, hash = {:#x}, new_hash = {:#x}",
-                    region_addr, size, hash, new_hash);
+        LOG_WARNING(
+            Render_Vulkan,
+            "Checking gpu region addr = {:#x}, size = {:#x}, hash = {:#x}, new_hash = {:#x}",
+            region_addr, size, hash, new_hash);
         // If the region hash changed add the copy to remove gpu modified region.
         if (new_hash != hash) {
             add_copy(region_addr, size);
@@ -475,7 +477,8 @@ bool BufferCache::SynchronizeBuffer(Buffer& buffer, VAddr device_addr, u32 size)
     };
     memory_tracker.ForEachUploadRange(device_addr, size, [&](u64 device_addr_out, u64 range_size) {
         // Prevent uploading to gpu modified regions.
-        gpu_region_hashes.ForEachBothRanges(device_addr_out, range_size, add_copy_checked, add_copy);
+        gpu_region_hashes.ForEachBothRanges(device_addr_out, range_size, add_copy_checked,
+                                            add_copy);
     });
     if (total_size_bytes == 0) {
         return true;
