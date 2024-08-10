@@ -98,6 +98,14 @@ void BufferCache::DownloadBufferMemory(Buffer& buffer, VAddr device_addr, u64 si
 }
 
 bool BufferCache::BindVertexBuffers(const Shader::Info& vs_info) {
+    boost::container::small_vector<vk::VertexInputAttributeDescription2EXT, 16> attributes;
+    boost::container::small_vector<vk::VertexInputBindingDescription2EXT, 16> bindings;
+    SCOPE_EXIT {
+        if (instance.IsVertexInputDynamicState()) {
+            scheduler.CommandBuffer().setVertexInputEXT(bindings, attributes);
+        }
+    };
+
     if (vs_info.vs_inputs.empty()) {
         return false;
     }
@@ -120,8 +128,6 @@ bool BufferCache::BindVertexBuffers(const Shader::Info& vs_info) {
     // Calculate buffers memory overlaps
     bool has_step_rate = false;
     boost::container::static_vector<BufferRange, NUM_VERTEX_BUFFERS> ranges{};
-    boost::container::small_vector<vk::VertexInputAttributeDescription2EXT, 16> attributes;
-    boost::container::small_vector<vk::VertexInputBindingDescription2EXT, 16> bindings;
     for (const auto& input : vs_info.vs_inputs) {
         if (input.instance_step_rate == Shader::Info::VsInput::InstanceIdType::OverStepRate0 ||
             input.instance_step_rate == Shader::Info::VsInput::InstanceIdType::OverStepRate1) {
@@ -187,9 +193,6 @@ bool BufferCache::BindVertexBuffers(const Shader::Info& vs_info) {
     }
 
     const auto cmdbuf = scheduler.CommandBuffer();
-    if (instance.IsVertexInputDynamicState()) {
-        cmdbuf.setVertexInputEXT(bindings, attributes);
-    }
     if (num_buffers > 0) {
         cmdbuf.bindVertexBuffers(0, num_buffers, host_buffers.data(), host_offsets.data());
     }
@@ -237,7 +240,7 @@ u32 BufferCache::BindIndexBuffer(bool& is_indexed, u32 index_offset) {
 std::pair<Buffer*, u32> BufferCache::ObtainBuffer(VAddr device_addr, u32 size, bool is_written) {
     std::scoped_lock lk{mutex};
     static constexpr u64 StreamThreshold = CACHING_PAGESIZE;
-    const bool is_gpu_dirty = memory_tracker.IsRegionGpuModified(device_addr, size);
+    const bool is_gpu_dirty = IsRegionGpuModified(device_addr, size);
     if (!is_written && size <= StreamThreshold && !is_gpu_dirty) {
         // For small uniform buffers that have not been modified by gpu
         // use device local stream buffer to reduce renderpass breaks.
