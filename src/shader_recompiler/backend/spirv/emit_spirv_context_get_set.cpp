@@ -131,8 +131,10 @@ Id EmitReadConstBuffer(EmitContext& ctx, u32 handle, Id index) {
     if (!Sirit::ValidId(buffer.offset)) {
         buffer.offset = ctx.GetBufferOffset(buffer.global_binding);
     }
-    const Id offset_dwords{ctx.OpShiftRightLogical(ctx.U32[1], buffer.offset, ctx.ConstU32(2U))};
-    index = ctx.OpIAdd(ctx.U32[1], index, offset_dwords);
+    if (!Sirit::ValidId(buffer.offset_dwords)) {
+        buffer.offset_dwords = ctx.OpShiftRightLogical(ctx.U32[1], buffer.offset, ctx.ConstU32(2U));
+    }
+    index = ctx.OpIAdd(ctx.U32[1], index, buffer.offset_dwords);
     const Id ptr{ctx.OpAccessChain(buffer.pointer_type, buffer.id, ctx.u32_zero_value, index)};
     return ctx.OpLoad(buffer.data_types->Get(1), ptr);
 }

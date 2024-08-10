@@ -203,6 +203,7 @@ public:
     struct BufferDefinition {
         Id id;
         Id offset;
+        Id offset_dwords;
         u32 global_binding;
         const VectorIds* data_types;
         Id pointer_type;
