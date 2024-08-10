@@ -167,6 +167,7 @@ EmitContext::SpirvAttribute EmitContext::GetAttributeInfo(AmdGpu::NumberFormat f
 
 void EmitContext::DefineBufferOffsets() {
     for (auto& buffer : buffers) {
+        const u32 binding = buffer.binding;
         const u32 half = Shader::PushData::BufOffsetIndex + (binding >> 4);
         const u32 comp = (binding & 0xf) >> 2;
         const u32 offset = (binding & 0x3) << 3;
