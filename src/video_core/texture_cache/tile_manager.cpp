@@ -5,7 +5,6 @@
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/renderer_vulkan/vk_shader_util.h"
 #include "video_core/texture_cache/image_view.h"
-#include "video_core/texture_cache/texture_cache.h"
 #include "video_core/texture_cache/tile_manager.h"
 
 #include "video_core/host_shaders/detile_m32x1_comp.h"
@@ -395,16 +394,17 @@ std::optional<vk::Buffer> TileManager::TryDetile(Image& image) {
     }
 
     // Prepare input buffer
+    const VAddr image_addr = image.info.guest_address;
     const u32 image_size = image.info.guest_size_bytes;
     const auto [in_buffer, in_offset] = [&] -> std::pair<vk::Buffer, u32> {
         // Use stream buffer for smaller textures.
         if (image_size <= stream_buffer.GetFreeSize()) {
-            u32 offset = stream_buffer.Copy(image.info.guest_address, image_size);
+            u32 offset = stream_buffer.Copy(image_addr, image_size);
             return {stream_buffer.Handle(), offset};
         }
         // Request temporary host buffer for larger sizes.
         auto in_buffer = AllocBuffer(image_size);
-        const auto addr = reinterpret_cast<const void*>(image.info.guest_address);
+        const auto addr = reinterpret_cast<const void*>(image_addr);
         Upload(in_buffer, addr, image_size);
         scheduler.DeferOperation([=, this]() { FreeBuffer(in_buffer); });
         return {in_buffer.first, 0};

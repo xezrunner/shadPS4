@@ -357,7 +357,9 @@ void EmitContext::DefineBuffers() {
             .global_binding = binding++,
             .data_types = data_types,
             .pointer_type = pointer_type,
-            .buffer = buffer.GetVsharp(info),
+            .dmft = buffer.dfmt,
+            .nfmt = buffer.nfmt,
+            .stride = buffer.GetVsharp(info).GetStride(),
         });
         interfaces.push_back(id);
         i++;
@@ -427,7 +429,7 @@ spv::ImageFormat GetFormat(const AmdGpu::Image& image) {
 
 Id ImageType(EmitContext& ctx, const ImageResource& desc, Id sampled_type) {
     const auto image = ctx.info.ReadUd<AmdGpu::Image>(desc.sgpr_base, desc.dword_offset);
-    const auto format = desc.is_storage ? GetFormat(image) : spv::ImageFormat::Unknown;
+    const auto format = desc.is_atomic ? GetFormat(image) : spv::ImageFormat::Unknown;
     const u32 sampled = desc.is_storage ? 2 : 1;
     switch (desc.type) {
     case AmdGpu::ImageType::Color1D:

@@ -113,7 +113,9 @@ public:
     }
 
     template <typename Func>
-    void ForEachInRange(VAddr base_addr, size_t size, Func&& func) const {
+    void ForEachInRange(VAddr base_addr, size_t size, Func&& func) {
+        using FuncReturn = typename std::invoke_result<Func, VAddr, VAddr, u64>::type;
+        static constexpr bool BOOL_BREAK = std::is_same_v<FuncReturn, bool>;
         if (m_ranges_map.empty()) {
             return;
         }
@@ -125,7 +127,7 @@ public:
             return;
         }
         auto end_it = m_ranges_map.upper_bound(search_interval);
-        for (; it != end_it; it++) {
+        for (; it != end_it;) {
             VAddr inter_addr_end = it->first.upper();
             VAddr inter_addr = it->first.lower();
             if (inter_addr_end > end_address) {
@@ -134,21 +136,32 @@ public:
             if (inter_addr < start_address) {
                 inter_addr = start_address;
             }
-            func(inter_addr, inter_addr_end, it->second);
+            if constexpr (BOOL_BREAK) {
+                if (func(inter_addr, inter_addr_end, it->second)) {
+                    auto it_next = std::next(it);
+                    m_ranges_map.erase(it);
+                    it = it_next;
+                    continue;
+                }
+            } else {
+                func(inter_addr, inter_addr_end, it->second);
+            }
+            it++;
         }
     }
 
-    template <typename Func>
-    void ForEachNotInRange(VAddr base_addr, size_t size, Func&& func) const {
+    template <typename Func1, typename Func2>
+    void ForEachBothRanges(VAddr base_addr, size_t size, Func1&& in_range, Func2&& not_range) {
         const VAddr end_addr = base_addr + size;
-        ForEachInRange(base_addr, size, [&](VAddr range_addr, VAddr range_end, u64) {
+        ForEachInRange(base_addr, size, [&](VAddr range_addr, VAddr range_end, u64 value) {
             if (size_t gap_size = range_addr - base_addr; gap_size != 0) {
-                func(base_addr, gap_size);
+                not_range(base_addr, gap_size);
             }
             base_addr = range_end;
+            return in_range(range_addr, range_end - range_addr, value);
         });
         if (base_addr != end_addr) {
-            func(base_addr, end_addr - base_addr);
+            not_range(base_addr, end_addr - base_addr);
         }
     }
 

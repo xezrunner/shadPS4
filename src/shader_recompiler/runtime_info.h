@@ -92,6 +92,7 @@ struct ImageResource {
     u32 dword_offset;
     AmdGpu::ImageType type;
     AmdGpu::NumberFormat nfmt;
+    bool is_atomic;
     bool is_storage;
     bool is_depth;
 };

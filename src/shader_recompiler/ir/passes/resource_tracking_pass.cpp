@@ -150,10 +150,8 @@ bool IsImageInstruction(const IR::Inst& inst) {
     }
 }
 
-bool IsImageStorageInstruction(const IR::Inst& inst) {
+bool IsAtomicImageInstruction(const IR::Inst& inst) {
     switch (inst.GetOpcode()) {
-    case IR::Opcode::ImageWrite:
-    case IR::Opcode::ImageRead:
     case IR::Opcode::ImageAtomicIAdd32:
     case IR::Opcode::ImageAtomicSMin32:
     case IR::Opcode::ImageAtomicUMin32:
@@ -168,6 +166,16 @@ bool IsImageStorageInstruction(const IR::Inst& inst) {
         return true;
     default:
         return false;
+    }
+}
+
+bool IsImageStorageInstruction(const IR::Inst& inst) {
+    switch (inst.GetOpcode()) {
+    case IR::Opcode::ImageWrite:
+    case IR::Opcode::ImageRead:
+        return true;
+    default:
+        return IsAtomicImageInstruction(inst);
     }
 }
 
@@ -194,9 +202,11 @@ public:
     u32 Add(const ImageResource& desc) {
         const u32 index{Add(image_resources, desc, [&desc](const auto& existing) {
             return desc.sgpr_base == existing.sgpr_base &&
-                   desc.dword_offset == existing.dword_offset && desc.type == existing.type &&
-                   desc.is_storage == existing.is_storage;
+                   desc.dword_offset == existing.dword_offset && desc.type == existing.type;
         })};
+        auto& image = image_resources[index];
+        image.is_atomic |= desc.is_atomic;
+        image.is_storage |= desc.is_storage;
         return index;
     }
 
@@ -500,6 +510,7 @@ void PatchImageInstruction(IR::Block& block, IR::Inst& inst, Info& info, Descrip
         .dword_offset = tsharp.dword_offset,
         .type = image.GetType(),
         .nfmt = static_cast<AmdGpu::NumberFormat>(image.GetNumberFmt()),
+        .is_atomic = IsAtomicImageInstruction(inst),
         .is_storage = IsImageStorageInstruction(inst),
         .is_depth = bool(inst_info.is_depth),
     });

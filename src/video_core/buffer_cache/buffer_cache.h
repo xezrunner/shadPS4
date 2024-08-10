@@ -12,6 +12,7 @@
 #include "common/slot_vector.h"
 #include "common/types.h"
 #include "video_core/buffer_cache/buffer.h"
+#include "video_core/buffer_cache/range_set.h"
 #include "video_core/buffer_cache/memory_tracker_base.h"
 #include "video_core/multi_level_page_table.h"
 
@@ -69,11 +70,17 @@ public:
     /// Obtains a buffer for the specified region.
     [[nodiscard]] std::pair<Buffer*, u32> ObtainBuffer(VAddr gpu_addr, u32 size, bool is_written);
 
+    /// Obtains a temporary buffer for usage in texture cache. May return nullptr.
+    [[nodiscard]] std::pair<const Buffer*, u32> ObtainTempBuffer(VAddr gpu_addr, u32 size);
+
     /// Return true when a region is registered on the cache
     [[nodiscard]] bool IsRegionRegistered(VAddr addr, size_t size);
 
     /// Return true when a CPU region is modified from the CPU
     [[nodiscard]] bool IsRegionCpuModified(VAddr addr, size_t size);
+
+    /// Return true when a CPU region is modified from the GPU
+    [[nodiscard]] bool IsRegionGpuModified(VAddr addr, size_t size);
 
 private:
     template <typename Func>
@@ -123,6 +130,8 @@ private:
     std::recursive_mutex mutex;
     Common::SlotVector<Buffer> slot_buffers;
     MemoryTracker memory_tracker;
+    RangeSet gpu_modified_regions;
+    RangeMap gpu_region_hashes;
     PageTable page_table;
 };
 

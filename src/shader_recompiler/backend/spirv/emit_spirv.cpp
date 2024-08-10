@@ -185,6 +185,8 @@ void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
     }
     ctx.AddCapability(spv::Capability::Int64);
     if (info.has_storage_images) {
+        ctx.AddCapability(spv::Capability::StorageImageReadWithoutFormat);
+        ctx.AddCapability(spv::Capability::StorageImageWriteWithoutFormat);
         ctx.AddCapability(spv::Capability::StorageImageExtendedFormats);
     }
     switch (program.info.stage) {
@@ -225,6 +227,7 @@ void DefineEntryPoint(const IR::Program& program, EmitContext& ctx, Id main) {
     default:
         throw NotImplementedException("Stage {}", u32(program.info.stage));
     }
+    ctx.SetMemoryModel(spv::AddressingModel::Logical, spv::MemoryModel::GLSL450);
     ctx.AddEntryPoint(execution_model, main, "main", interfaces);
 }
 

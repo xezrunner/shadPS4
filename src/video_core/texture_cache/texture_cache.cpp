@@ -8,6 +8,7 @@
 #include "video_core/renderer_vulkan/vk_scheduler.h"
 #include "video_core/texture_cache/texture_cache.h"
 #include "video_core/texture_cache/tile_manager.h"
+#include "video_core/buffer_cache/buffer_cache.h"
 
 namespace VideoCore {
 
@@ -319,8 +320,9 @@ void TextureCache::RefreshImage(Image& image, Vulkan::Scheduler* custom_schedule
             image.info.props.is_volume ? std::max(image.info.size.depth >> m, 1u) : 1u;
         const auto& [mip_size, mip_pitch, mip_height, mip_ofs] = image.info.mips_layout[m];
 
-        // Protect GPU modified resources from accidental reuploads.
-        if (True(image.flags & ImageFlagBits::GpuModified)) {
+        // Protect GPU modified resources from accidental CPU reuploads.
+        if (True(image.flags & ImageFlagBits::GpuModified) &&
+            !buffer_cache.IsRegionGpuModified(image.info.guest_address + mip_ofs, mip_size)) {
             const u8* addr = std::bit_cast<u8*>(image.info.guest_address);
             const u64 hash = XXH3_64bits(addr + mip_ofs, mip_size);
             if (image.mip_hashes[m] == hash) {
@@ -356,10 +358,19 @@ void TextureCache::RefreshImage(Image& image, Vulkan::Scheduler* custom_schedule
 
     vk::Buffer buffer{staging.Handle()};
     u32 offset{0};
+    const VAddr image_addr = image.info.guest_address;
+    const size_t image_size = image.info.guest_size_bytes;
+
     if (auto upload_buffer = tile_manager.TryDetile(image); upload_buffer) {
         buffer = *upload_buffer;
     } else {
-        offset = staging.Copy(image.info.guest_address, image.info.guest_size_bytes, 16);
+        const auto [vk_buffer, buf_offset] = buffer_cache.ObtainTempBuffer(image_addr, image_size);
+        if (vk_buffer) {
+            buffer = vk_buffer->Handle();
+            offset = buf_offset;
+        } else {
+            offset = staging.Copy(image_addr, image_size, 16);
+        }
     }
 
     for (auto& copy : image_copy) {
