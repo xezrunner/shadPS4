@@ -271,7 +271,7 @@ vk::UniqueInstance CreateInstance(vk::DynamicLoader& dl, Frontend::WindowSystemT
         },
         vk::LayerSettingEXT{
             .pLayerName = VALIDATION_LAYER_NAME,
-            .pSettingName = "gpuav_validate_copies",
+            .pSettingName = "gpuav_buffer_copies",
             .type = vk::LayerSettingTypeEXT::eBool32,
             .valueCount = 1,
             .pValues = &enable_gpuav,
