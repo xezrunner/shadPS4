@@ -426,20 +426,54 @@ Id EmitLoadBufferFormatF32x4(EmitContext& ctx, IR::Inst* inst, u32 handle, Id ad
 }
 
 template <u32 N>
+static Id PackF32ToUnorm(EmitContext& ctx, Id value) {
+    Id result{};
+    for (u32 i = 0; i < N; i++) {
+        const Id comp =
+            ctx.OpConvertFToU(ctx.U32[1], ctx.OpFMul(ctx.F32[1], ctx.ConstF32(255.0f),
+                                                     ctx.OpCompositeExtract(ctx.F32[1], value, i)));
+        if (i == 0) {
+            result = comp;
+        } else {
+            const Id comp_shifted = ctx.OpShiftLeftLogical(
+                ctx.U32[1], comp, ctx.OpIMul(ctx.U32[1], ctx.ConstU32(i), ctx.ConstU32(8u)));
+            result = ctx.OpBitwiseOr(ctx.U32[1], result, comp_shifted);
+        }
+    }
+    return result;
+}
+
+template <u32 N>
 static void EmitStoreBufferF32xN(EmitContext& ctx, u32 handle, Id address, Id value) {
     auto& buffer = ctx.buffers[handle];
     address = ctx.OpIAdd(ctx.U32[1], address, buffer.offset);
     const Id index = ctx.OpShiftRightLogical(ctx.U32[1], address, ctx.ConstU32(2u));
-    if constexpr (N == 1) {
-        const Id ptr{ctx.OpAccessChain(buffer.pointer_type, buffer.id, ctx.u32_zero_value, index)};
-        ctx.OpStore(ptr, value);
-    } else {
-        for (u32 i = 0; i < N; i++) {
-            const Id index_i = ctx.OpIAdd(ctx.U32[1], index, ctx.ConstU32(i));
-            const Id ptr =
-                ctx.OpAccessChain(buffer.pointer_type, buffer.id, ctx.u32_zero_value, index_i);
-            ctx.OpStore(ptr, ctx.OpCompositeExtract(ctx.F32[1], value, i));
+    switch (buffer.buffer.GetNumberFmt()) {
+    case AmdGpu::NumberFormat::Uint:
+    case AmdGpu::NumberFormat::Float: {
+        ASSERT(buffer.buffer.GetStride() == sizeof(float) * N);
+        if constexpr (N == 1) {
+            const Id ptr{
+                ctx.OpAccessChain(buffer.pointer_type, buffer.id, ctx.u32_zero_value, index)};
+            ctx.OpStore(ptr, value);
+        } else {
+            for (u32 i = 0; i < N; i++) {
+                const Id index_i = ctx.OpIAdd(ctx.U32[1], index, ctx.ConstU32(i));
+                const Id ptr =
+                    ctx.OpAccessChain(buffer.pointer_type, buffer.id, ctx.u32_zero_value, index_i);
+                ctx.OpStore(ptr, ctx.OpCompositeExtract(ctx.F32[1], value, i));
+            }
         }
+        break;
+    case AmdGpu::NumberFormat::Unorm: {
+        const Id ptr = ctx.OpAccessChain(buffer.pointer_type, buffer.id, ctx.u32_zero_value, index);
+        ctx.OpStore(ptr, ctx.OpBitcast(ctx.F32[1], PackF32ToUnorm<N>(ctx, value)));
+        break;
+    }
+    default: {
+        UNREACHABLE();
+    }
+    }
     }
 }
 
