@@ -285,6 +285,13 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
             Shader::Info info = MakeShaderInfo(stage, pgm->user_data, regs);
             info.pgm_base = pgm->Address<uintptr_t>();
             info.pgm_hash = hash;
+            
+            // TEMP: for Rock Band 4:
+            // Skip broken shader with V_MOVREL... instructions:
+            if (hash == 0x13a1d5fc) {
+                return nullptr;
+            }
+            
             programs[i] =
                 Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info), profile);
 
@@ -331,12 +338,6 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline() {
         // TEMP: for Amplitude 2016:
         // Skip broken shader with V_MOVREL... instructions:
         if (compute_key == 0xc7f34c4f) {
-            return nullptr;
-        }
-
-        // TEMP: for Rock Band 4:
-        // Skip broken shader with V_MOVREL... instructions:
-        if (compute_key == 0x13a1d5fc) {
             return nullptr;
         }
 
