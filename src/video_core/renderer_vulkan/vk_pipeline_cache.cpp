@@ -305,6 +305,11 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
             Shader::Info info = MakeShaderInfo(stage, pgm->user_data, regs);
             info.pgm_base = pgm->Address<uintptr_t>();
             info.pgm_hash = hash;
+            // TEMP: for Rock Band 4:
+            // Skip broken shader with V_MOVREL... instructions:
+            if (hash == 0x13a1d5fc) {
+                return nullptr;
+            }
             program->pgm =
                 Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info), profile);
 
