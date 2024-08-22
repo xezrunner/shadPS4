@@ -372,6 +372,11 @@ std::unique_ptr<ComputePipeline> PipelineCache::CreateComputePipeline() {
         if (compute_key == 0x13a1d5fc) {
             return nullptr;
         }
+        // TEMP: for Rock Band 4 Rivals:
+        // Skip broken shader with V_MOVREL... instructions:
+        if (compute_key == 0x28080e22) {
+            return nullptr;
+        }
         program->pgm =
             Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info), profile);
 
