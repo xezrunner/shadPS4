@@ -308,6 +308,10 @@ void Translator::EmitVectorAlu(const GcnInst& inst) {
 
     case Opcode::V_MOVRELS_B32:
         return;
+    //case Opcode::V_MOVRELD_B32:
+    //    return;
+    //case Opcode::V_CMPX_LE_I32:
+    //    return;
 
     default:
         LogMissingOpcode(inst);
