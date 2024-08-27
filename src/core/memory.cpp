@@ -45,9 +45,6 @@ void MemoryManager::SetupMemoryRegions(u64 flexible_size) {
     // Note that this should never be called after direct memory allocations have been made.
     dmem_map.clear();
     dmem_map.emplace(0, DirectMemoryArea{0, total_direct_size});
-
-    LOG_INFO(Kernel_Vmm, "Configured memory regions: flexible size = {:#x}, direct size = {:#x}",
-             total_flexible_size, total_direct_size);
 }
 
 PAddr MemoryManager::Allocate(PAddr search_start, PAddr search_end, size_t size, u64 alignment,
@@ -57,17 +54,12 @@ PAddr MemoryManager::Allocate(PAddr search_start, PAddr search_end, size_t size,
     auto dmem_area = FindDmemArea(search_start);
 
     const auto is_suitable = [&] {
-        const auto aligned_base = alignment > 0 ? Common::AlignUp(dmem_area->second.base, alignment)
-                                                : dmem_area->second.base;
-        const auto alignment_size = aligned_base - dmem_area->second.base;
-        const auto remaining_size =
-            dmem_area->second.size >= alignment_size ? dmem_area->second.size - alignment_size : 0;
-        return dmem_area->second.is_free && remaining_size >= size;
+        return dmem_area->second.is_free && dmem_area->second.size >= size;
     };
     while (!is_suitable() && dmem_area->second.GetEnd() <= search_end) {
         dmem_area++;
     }
-    ASSERT_MSG(is_suitable(), "Unable to find free direct memory area: size = {:#x}", size);
+    ASSERT_MSG(is_suitable(), "Unable to find free direct memory area");
 
     // Align free position
     PAddr free_addr = dmem_area->second.base;
@@ -353,19 +345,14 @@ int MemoryManager::DirectQueryAvailable(PAddr search_start, PAddr search_end, si
             continue;
         }
 
-        const auto aligned_base = alignment > 0 ? Common::AlignUp(dmem_area->second.base, alignment)
-                                                : dmem_area->second.base;
-        const auto alignment_size = aligned_base - dmem_area->second.base;
-        const auto remaining_size =
-            dmem_area->second.size >= alignment_size ? dmem_area->second.size - alignment_size : 0;
-        if (remaining_size > max_size) {
-            paddr = aligned_base;
-            max_size = remaining_size;
+        if (dmem_area->second.size > max_size) {
+            paddr = dmem_area->second.base;
+            max_size = dmem_area->second.size;
         }
         dmem_area++;
     }
 
-    *phys_addr_out = paddr;
+    *phys_addr_out = alignment > 0 ? Common::AlignUp(paddr, alignment) : paddr;
     *size_out = max_size;
     return ORBIS_OK;
 }
@@ -443,8 +430,7 @@ MemoryManager::DMemHandle MemoryManager::CarveDmemArea(PAddr addr, size_t size) 
 
     const PAddr start_in_area = addr - area.base;
     const PAddr end_in_vma = start_in_area + size;
-    ASSERT_MSG(end_in_vma <= area.size, "Mapping cannot fit inside free region: size = {:#x}",
-               size);
+    ASSERT_MSG(end_in_vma <= area.size, "Mapping cannot fit inside free region");
 
     if (end_in_vma != area.size) {
         // Split VMA at the end of the allocated region
