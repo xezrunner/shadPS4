@@ -314,9 +314,17 @@ std::unique_ptr<GraphicsPipeline> PipelineCache::CreateGraphicsPipeline() {
 
             // TEMP: for Rock Band 4:
             // Skip broken shader with V_MOVREL... instructions:
-            if (hash == 0xce54e4dd) {
-                return nullptr;
-            }
+            //if (hash == 0xce54e4dd) {
+            //    return nullptr;
+            //}
+
+            //if (hash == 0x15c4a3a9) {
+            //    return nullptr;
+            //}
+
+            //if (hash == 0xf96ad059) {
+            //    return nullptr;
+            //}
             
             program->pgm =
                 Shader::TranslateProgram(inst_pool, block_pool, code, std::move(info), profile);
