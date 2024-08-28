@@ -209,10 +209,6 @@ U1 IREmitter::GetVcc() {
     return Inst<U1>(Opcode::GetVcc);
 }
 
-U32 IREmitter::GetSccLo() {
-    return Inst<U32>(Opcode::GetSccLo);
-}
-
 U32 IREmitter::GetVccLo() {
     return Inst<U32>(Opcode::GetVccLo);
 }
@@ -408,9 +404,9 @@ Value IREmitter::BufferAtomicXor(const Value& handle, const Value& address, cons
     return Inst(Opcode::BufferAtomicXor32, Flags{info}, handle, address, value);
 }
 
-Value IREmitter::BufferAtomicExchange(const Value& handle, const Value& address, const Value& value,
-                                      BufferInstInfo info) {
-    return Inst(Opcode::BufferAtomicExchange32, Flags{info}, handle, address, value);
+Value IREmitter::BufferAtomicSwap(const Value& handle, const Value& address, const Value& value,
+                                  BufferInstInfo info) {
+    return Inst(Opcode::BufferAtomicSwap32, Flags{info}, handle, address, value);
 }
 
 void IREmitter::StoreBufferFormat(int num_dwords, const Value& handle, const Value& address,
@@ -443,6 +439,18 @@ U32 IREmitter::WarpId() {
 
 U32 IREmitter::QuadShuffle(const U32& value, const U32& index) {
     return Inst<U32>(Opcode::QuadShuffle, value, index);
+}
+
+U32 IREmitter::ReadFirstLane(const U32& value) {
+    return Inst<U32>(Opcode::ReadFirstLane, value);
+}
+
+U32 IREmitter::ReadLane(const U32& value, const U32& lane) {
+    return Inst<U32>(Opcode::ReadLane, value, lane);
+}
+
+U32 IREmitter::WriteLane(const U32& value, const U32& write_value, const U32& lane) {
+    return Inst<U32>(Opcode::WriteLane, value, write_value, lane);
 }
 
 F32F64 IREmitter::FPAdd(const F32F64& a, const F32F64& b) {
@@ -1107,8 +1115,18 @@ U32U64 IREmitter::ShiftRightArithmetic(const U32U64& base, const U32& shift) {
     }
 }
 
-U32 IREmitter::BitwiseAnd(const U32& a, const U32& b) {
-    return Inst<U32>(Opcode::BitwiseAnd32, a, b);
+U32U64 IREmitter::BitwiseAnd(const U32U64& a, const U32U64& b) {
+    if (a.Type() != b.Type()) {
+        UNREACHABLE_MSG("Mismatching types {} and {}", a.Type(), b.Type());
+    }
+    switch (a.Type()) {
+    case Type::U32:
+        return Inst<U32>(Opcode::BitwiseAnd32, a, b);
+    case Type::U64:
+        return Inst<U64>(Opcode::BitwiseAnd64, a, b);
+    default:
+        ThrowInvalidType(a.Type());
+    }
 }
 
 U32U64 IREmitter::BitwiseOr(const U32U64& a, const U32U64& b) {

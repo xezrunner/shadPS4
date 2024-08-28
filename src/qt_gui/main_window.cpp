@@ -1,16 +1,12 @@
 // SPDX-FileCopyrightText: Copyright 2024 shadPS4 Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include <QDir>
 #include <QDockWidget>
-#include <QFileDialog>
-#include <QMessageBox>
 #include <QProgressDialog>
-#include <QStatusBar>
-#include <QtConcurrent>
 
 #include "about_dialog.h"
 #include "common/io_file.h"
+#include "common/string_util.h"
 #include "common/version.h"
 #include "core/file_format/pkg.h"
 #include "core/loader.h"
@@ -42,6 +38,7 @@ bool MainWindow::Init() {
     SetLastUsedTheme();
     SetLastIconSizeBullet();
     GetPhysicalDevices();
+    LoadTranslation();
     // show ui
     setMinimumSize(350, minimumSizeHint().height());
     setWindowTitle(QString::fromStdString("shadPS4 v" + std::string(Common::VERSION)));
@@ -120,7 +117,7 @@ void MainWindow::CreateDockWindows() {
         m_elf_viewer->hide();
         m_game_list_frame->show();
         m_dock_widget->setWidget(m_game_list_frame.data());
-        slider_pos = Config::getSliderPositon();
+        slider_pos = Config::getSliderPosition();
         ui->sizeSlider->setSliderPosition(slider_pos); // set slider pos at start;
         isTableList = true;
     } else if (table_mode == 1) { // Grid
@@ -128,7 +125,7 @@ void MainWindow::CreateDockWindows() {
         m_elf_viewer->hide();
         m_game_grid_frame->show();
         m_dock_widget->setWidget(m_game_grid_frame.data());
-        slider_pos = Config::getSliderPositonGrid();
+        slider_pos = Config::getSliderPositionGrid();
         ui->sizeSlider->setSliderPosition(slider_pos); // set slider pos at start;
         isTableList = false;
     } else {
@@ -188,12 +185,12 @@ void MainWindow::CreateConnects() {
                 36 + value; // 36 is the minimum icon size to use due to text disappearing.
             m_game_list_frame->ResizeIcons(36 + value);
             Config::setIconSize(36 + value);
-            Config::setSliderPositon(value);
+            Config::setSliderPosition(value);
         } else {
             m_game_grid_frame->icon_size = 69 + value;
             m_game_grid_frame->PopulateGameGrid(m_game_info->m_games, false);
             Config::setIconSizeGrid(69 + value);
-            Config::setSliderPositonGrid(value);
+            Config::setSliderPositionGrid(value);
         }
     });
 
@@ -205,11 +202,19 @@ void MainWindow::CreateConnects() {
 
     connect(ui->configureAct, &QAction::triggered, this, [this]() {
         auto settingsDialog = new SettingsDialog(m_physical_devices, this);
+
+        connect(settingsDialog, &SettingsDialog::LanguageChanged, this,
+                &MainWindow::OnLanguageChanged);
+
         settingsDialog->exec();
     });
 
     connect(ui->settingsButton, &QPushButton::clicked, this, [this]() {
         auto settingsDialog = new SettingsDialog(m_physical_devices, this);
+
+        connect(settingsDialog, &SettingsDialog::LanguageChanged, this,
+                &MainWindow::OnLanguageChanged);
+
         settingsDialog->exec();
     });
 
@@ -224,11 +229,11 @@ void MainWindow::CreateConnects() {
                 36; // 36 is the minimum icon size to use due to text disappearing.
             ui->sizeSlider->setValue(0); // icone_size - 36
             Config::setIconSize(36);
-            Config::setSliderPositon(0);
+            Config::setSliderPosition(0);
         } else {
             ui->sizeSlider->setValue(0); // icone_size - 36
             Config::setIconSizeGrid(69);
-            Config::setSliderPositonGrid(0);
+            Config::setSliderPositionGrid(0);
         }
     });
 
@@ -237,11 +242,11 @@ void MainWindow::CreateConnects() {
             m_game_list_frame->icon_size = 64;
             ui->sizeSlider->setValue(28);
             Config::setIconSize(64);
-            Config::setSliderPositon(28);
+            Config::setSliderPosition(28);
         } else {
             ui->sizeSlider->setValue(28);
             Config::setIconSizeGrid(97);
-            Config::setSliderPositonGrid(28);
+            Config::setSliderPositionGrid(28);
         }
     });
 
@@ -250,11 +255,11 @@ void MainWindow::CreateConnects() {
             m_game_list_frame->icon_size = 128;
             ui->sizeSlider->setValue(92);
             Config::setIconSize(128);
-            Config::setSliderPositon(92);
+            Config::setSliderPosition(92);
         } else {
             ui->sizeSlider->setValue(92);
             Config::setIconSizeGrid(160);
-            Config::setSliderPositonGrid(91);
+            Config::setSliderPositionGrid(91);
         }
     });
 
@@ -263,11 +268,11 @@ void MainWindow::CreateConnects() {
             m_game_list_frame->icon_size = 256;
             ui->sizeSlider->setValue(220);
             Config::setIconSize(256);
-            Config::setSliderPositon(220);
+            Config::setSliderPosition(220);
         } else {
             ui->sizeSlider->setValue(220);
             Config::setIconSizeGrid(256);
-            Config::setSliderPositonGrid(220);
+            Config::setSliderPositionGrid(220);
         }
     });
     // List
@@ -282,7 +287,7 @@ void MainWindow::CreateConnects() {
         }
         isTableList = true;
         Config::setTableMode(0);
-        int slider_pos = Config::getSliderPositon();
+        int slider_pos = Config::getSliderPosition();
         ui->sizeSlider->setEnabled(true);
         ui->sizeSlider->setSliderPosition(slider_pos);
     });
@@ -298,7 +303,7 @@ void MainWindow::CreateConnects() {
         }
         isTableList = false;
         Config::setTableMode(1);
-        int slider_pos_grid = Config::getSliderPositonGrid();
+        int slider_pos_grid = Config::getSliderPositionGrid();
         ui->sizeSlider->setEnabled(true);
         ui->sizeSlider->setSliderPosition(slider_pos_grid);
     });
@@ -532,15 +537,24 @@ void MainWindow::InstallDragDropPkg(std::filesystem::path file, int pkgNum, int 
         pkg = PKG();
         pkg.Open(file);
         std::string failreason;
-        const auto extract_path =
-            std::filesystem::path(Config::getGameInstallDir()) / pkg.GetTitleID();
+        auto extract_path = std::filesystem::path(Config::getGameInstallDir()) / pkg.GetTitleID();
         QString pkgType = QString::fromStdString(pkg.GetPkgFlags());
         QDir game_dir(QString::fromStdString(extract_path.string()));
         if (game_dir.exists()) {
             QMessageBox msgBox;
             msgBox.setWindowTitle("PKG Extraction");
+
+            psf.open("", pkg.sfo);
+
+            std::string content_id = psf.GetString("CONTENT_ID");
+            std::string entitlement_label = Common::SplitString(content_id, '-')[2];
+
+            auto addon_extract_path = Common::FS::GetUserPath(Common::FS::PathType::AddonsDir) /
+                                      pkg.GetTitleID() / entitlement_label;
+            QDir addon_dir(QString::fromStdString(addon_extract_path.string()));
+            auto category = psf.GetString("CATEGORY");
+
             if (pkgType.contains("PATCH")) {
-                psf.open("", pkg.sfo);
                 QString pkg_app_version = QString::fromStdString(psf.GetString("APP_VER"));
                 psf.open(extract_path.string() + "/sce_sys/param.sfo", {});
                 QString game_app_version = QString::fromStdString(psf.GetString("APP_VER"));
@@ -573,6 +587,34 @@ void MainWindow::InstallDragDropPkg(std::filesystem::path file, int pkgNum, int 
                 } else {
                     return;
                 }
+            } else if (category == "ac") {
+                if (!addon_dir.exists()) {
+                    QMessageBox addonMsgBox;
+                    addonMsgBox.setWindowTitle("DLC Installation");
+                    addonMsgBox.setText(QString("Would you like to install DLC: %1?")
+                                            .arg(QString::fromStdString(entitlement_label)));
+
+                    addonMsgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                    addonMsgBox.setDefaultButton(QMessageBox::No);
+                    int result = addonMsgBox.exec();
+                    if (result == QMessageBox::Yes) {
+                        extract_path = addon_extract_path;
+                    } else {
+                        return;
+                    }
+                } else {
+                    msgBox.setText(
+                        QString("DLC already installed\n%1\nWould you like to overwrite?")
+                            .arg(QString::fromStdString(addon_extract_path.string())));
+                    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+                    msgBox.setDefaultButton(QMessageBox::No);
+                    int result = msgBox.exec();
+                    if (result == QMessageBox::Yes) {
+                        extract_path = addon_extract_path;
+                    } else {
+                        return;
+                    }
+                }
             } else {
                 msgBox.setText(QString("Game already installed\n%1\nWould you like to overwrite?")
                                    .arg(QString::fromStdString(extract_path.string())));
@@ -600,44 +642,46 @@ void MainWindow::InstallDragDropPkg(std::filesystem::path file, int pkgNum, int 
         } else {
             int nfiles = pkg.GetNumberOfFiles();
 
-            QVector<int> indices;
-            for (int i = 0; i < nfiles; i++) {
-                indices.append(i);
-            }
-
-            QProgressDialog dialog;
-            dialog.setWindowTitle("PKG Extraction");
-            dialog.setWindowModality(Qt::WindowModal);
-            QString extractmsg = QString("Extracting PKG %1/%2").arg(pkgNum).arg(nPkg);
-            dialog.setLabelText(extractmsg);
-            dialog.setAutoClose(true);
-            dialog.setRange(0, nfiles);
-
-            QFutureWatcher<void> futureWatcher;
-            connect(&futureWatcher, &QFutureWatcher<void>::finished, this, [=, this]() {
-                if (pkgNum == nPkg) {
-                    QString path = QString::fromStdString(Config::getGameInstallDir());
-                    QMessageBox extractMsgBox(this);
-                    extractMsgBox.setWindowTitle("Extraction Finished");
-                    extractMsgBox.setText(QString("Game successfully installed at %1").arg(path));
-                    extractMsgBox.addButton(QMessageBox::Ok);
-                    extractMsgBox.setDefaultButton(QMessageBox::Ok);
-                    connect(&extractMsgBox, &QMessageBox::buttonClicked, this,
-                            [&](QAbstractButton* button) {
-                                if (extractMsgBox.button(QMessageBox::Ok) == button) {
-                                    extractMsgBox.close();
-                                    emit ExtractionFinished();
-                                }
-                            });
-                    extractMsgBox.exec();
+            if (nfiles > 0) {
+                QVector<int> indices;
+                for (int i = 0; i < nfiles; i++) {
+                    indices.append(i);
                 }
-            });
-            connect(&dialog, &QProgressDialog::canceled, [&]() { futureWatcher.cancel(); });
-            connect(&futureWatcher, &QFutureWatcher<void>::progressValueChanged, &dialog,
-                    &QProgressDialog::setValue);
-            futureWatcher.setFuture(
-                QtConcurrent::map(indices, [&](int index) { pkg.ExtractFiles(index); }));
-            dialog.exec();
+            QProgressDialog dialog;
+                dialog.setWindowTitle("PKG Extraction");
+                dialog.setWindowModality(Qt::WindowModal);
+                QString extractmsg = QString("Extracting PKG %1/%2").arg(pkgNum).arg(nPkg);
+                dialog.setLabelText(extractmsg);
+                dialog.setAutoClose(true);
+                dialog.setRange(0, nfiles);
+
+                QFutureWatcher<void> futureWatcher;
+                connect(&futureWatcher, &QFutureWatcher<void>::finished, this, [=, this]() {
+                    if (pkgNum == nPkg) {
+                        QString path = QString::fromStdString(Config::getGameInstallDir());
+                        QMessageBox extractMsgBox(this);
+                        extractMsgBox.setWindowTitle("Extraction Finished");
+                        extractMsgBox.setText(
+                            QString("Game successfully installed at %1").arg(path));
+                        extractMsgBox.addButton(QMessageBox::Ok);
+                        extractMsgBox.setDefaultButton(QMessageBox::Ok);
+                        connect(&extractMsgBox, &QMessageBox::buttonClicked, this,
+                                [&](QAbstractButton* button) {
+                                    if (extractMsgBox.button(QMessageBox::Ok) == button) {
+                                        extractMsgBox.close();
+                                        emit ExtractionFinished();
+                                    }
+                                });
+                        extractMsgBox.exec();
+                    }
+                });
+                connect(&dialog, &QProgressDialog::canceled, [&]() { futureWatcher.cancel(); });
+                connect(&futureWatcher, &QFutureWatcher<void>::progressValueChanged, &dialog,
+                        &QProgressDialog::setValue);
+                futureWatcher.setFuture(
+                    QtConcurrent::map(indices, [&](int index) { pkg.ExtractFiles(index); }));
+                dialog.exec();
+            }
         }
     } else {
         QMessageBox::critical(this, "PKG ERROR", "File doesn't appear to be a valid PKG file");
@@ -785,4 +829,36 @@ void MainWindow::CreateRecentGameActions() {
         Core::Emulator emulator;
         emulator.Run(gamePath.toUtf8().constData());
     });
+}
+
+void MainWindow::LoadTranslation() {
+    auto language = QString::fromStdString(Config::getEmulatorLanguage());
+
+    const QString base_dir = QStringLiteral(":/translations");
+    QString base_path = QStringLiteral("%1/%2.qm").arg(base_dir).arg(language);
+
+    if (QFile::exists(base_path)) {
+        if (translator != nullptr) {
+            qApp->removeTranslator(translator);
+        }
+
+        translator = new QTranslator(qApp);
+        if (!translator->load(base_path)) {
+            QMessageBox::warning(
+                nullptr, QStringLiteral("Translation Error"),
+                QStringLiteral("Failed to find load translation file for '%1':\n%2")
+                    .arg(language)
+                    .arg(base_path));
+            delete translator;
+        } else {
+            qApp->installTranslator(translator);
+            ui->retranslateUi(this);
+        }
+    }
+}
+
+void MainWindow::OnLanguageChanged(const std::string& locale) {
+    Config::setEmulatorLanguage(locale);
+
+    LoadTranslation();
 }

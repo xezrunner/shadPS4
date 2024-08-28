@@ -66,9 +66,8 @@ git_branch_name(GIT_BRANCH)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/common/scm_rev.cpp.in" "${CMAKE_CURRENT_SOURCE_DIR}/src/common/scm_rev.cpp" @ONLY)
 
 find_package(Boost 1.84.0 CONFIG)
-find_package(cryptopp 8.9.0 MODULE)
 find_package(FFmpeg 5.1.2 MODULE)
-find_package(fmt 10.2.1 CONFIG)
+find_package(fmt 10.2.0 CONFIG)
 find_package(glslang 14.2.0 CONFIG)
 find_package(magic_enum 0.9.6 CONFIG)
 find_package(RenderDoc 1.6.0 MODULE)
@@ -79,8 +78,12 @@ find_package(VulkanHeaders 1.3.289 CONFIG)
 find_package(VulkanMemoryAllocator 3.1.0 CONFIG)
 find_package(xbyak 7.07 CONFIG)
 find_package(xxHash 0.8.2 MODULE)
-find_package(zlib-ng 2.2.0 MODULE)
-find_package(Zydis 4.1.0 CONFIG)
+find_package(zlib-ng 2.1.7 MODULE)
+find_package(Zydis 5.0.0 CONFIG)
+
+if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR NOT MSVC)
+    find_package(cryptopp 8.9.0 MODULE)
+endif()
 
 if (APPLE)
     find_package(date 3.0.1 CONFIG)
@@ -91,10 +94,6 @@ include(CheckSymbolExists)
 check_symbol_exists(pthread_mutex_timedlock "pthread.h" HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 if(HAVE_PTHREAD_MUTEX_TIMEDLOCK OR WIN32)
     add_compile_options(-DHAVE_PTHREAD_MUTEX_TIMEDLOCK)
-endif()
-check_symbol_exists(sem_timedwait "semaphore.h" HAVE_SEM_TIMEDWAIT)
-if(HAVE_SEM_TIMEDWAIT OR WIN32)
-    add_compile_options(-DHAVE_SEM_TIMEDWAIT)
 endif()
 
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -110,11 +109,27 @@ add_subdirectory(externals)
 include_directories(src)
 
 if(ENABLE_QT_GUI)
-    find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
+    find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent LinguistTools)
     qt_standard_project_setup()
     set(CMAKE_AUTORCC ON)
     set(CMAKE_AUTOMOC ON)
     set(CMAKE_AUTOUIC ON)
+
+    set(QT_TRANSLATIONS "${PROJECT_SOURCE_DIR}/src/qt_gui/translations")
+    file(GLOB_RECURSE TRANSLATIONS_TS ${QT_TRANSLATIONS}/*.ts)
+
+    set_source_files_properties(${TRANSLATIONS_TS} PROPERTIES OUTPUT_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/translations")
+    qt_add_translation(TRANSLATIONS_QM ${TRANSLATIONS_TS})
+
+    set(TRANSLATIONS_QRC ${CMAKE_CURRENT_BINARY_DIR}/translations/translations.qrc)
+    file(WRITE ${TRANSLATIONS_QRC} "<RCC><qresource prefix=\"translations\">\n")
+    foreach (QM ${TRANSLATIONS_QM})
+        get_filename_component(QM_FILE ${QM} NAME)
+        file(APPEND ${TRANSLATIONS_QRC} "<file>${QM_FILE}</file>\n")
+    endforeach (QM)
+    file(APPEND ${TRANSLATIONS_QRC} "</qresource></RCC>")
+
+    qt_add_resources(TRANSLATIONS ${TRANSLATIONS_QRC})
 endif()
 
 set(AUDIO_CORE src/audio_core/sdl_audio.cpp
@@ -133,6 +148,7 @@ set(AUDIO_LIB src/core/libraries/audio/audioin.cpp
 
 set(GNM_LIB src/core/libraries/gnmdriver/gnmdriver.cpp
             src/core/libraries/gnmdriver/gnmdriver.h
+            src/core/libraries/gnmdriver/gnm_error.h
 )
 
 set(KERNEL_LIB 
@@ -214,6 +230,7 @@ set(SYSTEM_LIBS src/core/libraries/system/commondialog.cpp
                 src/core/libraries/ngs2/ngs2_error.h
                 src/core/libraries/ngs2/ngs2_impl.cpp
                 src/core/libraries/ngs2/ngs2_impl.h
+                src/core/libraries/ajm/ajm_error.h
 )
 
 set(VIDEOOUT_LIB src/core/libraries/videoout/buffer.h
@@ -249,6 +266,7 @@ set(PLAYGO_LIB src/core/libraries/playgo/playgo.cpp
 
 set(RANDOM_LIB src/core/libraries/random/random.cpp
                src/core/libraries/random/random.h
+               src/core/libraries/random/random_error.h
 )
 
 set(USBD_LIB src/core/libraries/usbd/usbd.cpp
@@ -431,7 +449,7 @@ set(SHADER_RECOMPILER src/shader_recompiler/exception.h
                       src/shader_recompiler/frontend/opcodes.h
                       src/shader_recompiler/frontend/structured_control_flow.cpp
                       src/shader_recompiler/frontend/structured_control_flow.h
-                      src/shader_recompiler/ir/passes/constant_propogation_pass.cpp
+                      src/shader_recompiler/ir/passes/constant_propagation_pass.cpp
                       src/shader_recompiler/ir/passes/dead_code_elimination_pass.cpp
                       src/shader_recompiler/ir/passes/identity_removal_pass.cpp
                       src/shader_recompiler/ir/passes/ir_passes.h
@@ -469,6 +487,7 @@ set(VIDEO_CORE src/video_core/amdgpu/liverpool.cpp
                src/video_core/amdgpu/pm4_cmds.h
                src/video_core/amdgpu/pm4_opcodes.h
                src/video_core/amdgpu/resource.h
+               src/video_core/amdgpu/default_context.cpp
                src/video_core/buffer_cache/buffer.cpp
                src/video_core/buffer_cache/buffer.h
                src/video_core/buffer_cache/buffer_cache.cpp
@@ -571,6 +590,7 @@ set(QT_GUI src/qt_gui/about_dialog.cpp
            src/qt_gui/main.cpp
            ${EMULATOR}
            ${RESOURCE_FILES}
+           ${TRANSLATIONS}
 )
 endif()
 
