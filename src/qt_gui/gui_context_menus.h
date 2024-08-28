@@ -4,17 +4,9 @@
 #pragma once
 
 #include <QClipboard>
-#include <QCoreApplication>
 #include <QDesktopServices>
-#include <QFile>
-#include <QHeaderView>
-#include <QImage>
 #include <QMenu>
 #include <QMessageBox>
-#include <QPixmap>
-#include <QStandardPaths>
-#include <QTableWidget>
-#include <QTextStream>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 
@@ -44,10 +36,10 @@ public:
 
         // Setup menu.
         QMenu menu(widget);
-        QAction createShortcut("Create Shortcut", widget);
-        QAction openFolder("Open Game Folder", widget);
-        QAction openSfoViewer("SFO Viewer", widget);
-        QAction openTrophyViewer("Trophy Viewer", widget);
+        QAction createShortcut(tr("Create Shortcut"), widget);
+        QAction openFolder(tr("Open Game Folder"), widget);
+        QAction openSfoViewer(tr("SFO Viewer"), widget);
+        QAction openTrophyViewer(tr("Trophy Viewer"), widget);
 
         menu.addAction(&openFolder);
         menu.addAction(&createShortcut);
@@ -55,10 +47,10 @@ public:
         menu.addAction(&openTrophyViewer);
 
         // "Copy" submenu.
-        QMenu* copyMenu = new QMenu("Copy info", widget);
-        QAction* copyName = new QAction("Copy Name", widget);
-        QAction* copySerial = new QAction("Copy Serial", widget);
-        QAction* copyNameAll = new QAction("Copy All", widget);
+        QMenu* copyMenu = new QMenu(tr("Copy info"), widget);
+        QAction* copyName = new QAction(tr("Copy Name"), widget);
+        QAction* copySerial = new QAction(tr("Copy Serial"), widget);
+        QAction* copyNameAll = new QAction(tr("Copy All"), widget);
 
         copyMenu->addAction(copyName);
         copyMenu->addAction(copySerial);
@@ -84,7 +76,7 @@ public:
                 QTableWidget* tableWidget = new QTableWidget(rows, 2);
                 tableWidget->setAttribute(Qt::WA_DeleteOnClose);
                 connect(widget->parent(), &QWidget::destroyed, tableWidget,
-                        [widget, tableWidget]() { tableWidget->deleteLater(); });
+                        [tableWidget]() { tableWidget->deleteLater(); });
 
                 tableWidget->verticalHeader()->setVisible(false); // Hide vertical header
                 int row = 0;
@@ -124,7 +116,7 @@ public:
                 tableWidget->horizontalHeader()->setVisible(false);
 
                 tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Fixed);
-                tableWidget->setWindowTitle("SFO Viewer");
+                tableWidget->setWindowTitle(tr("SFO Viewer"));
                 tableWidget->show();
             }
         }
@@ -135,7 +127,7 @@ public:
             TrophyViewer* trophyViewer = new TrophyViewer(trophyPath, gameTrpPath);
             trophyViewer->show();
             connect(widget->parent(), &QWidget::destroyed, trophyViewer,
-                    [widget, trophyViewer]() { trophyViewer->deleteLater(); });
+                    [trophyViewer]() { trophyViewer->deleteLater(); });
         }
 
         if (selected == &createShortcut) {
@@ -178,15 +170,15 @@ public:
                     if (createShortcutLinux(linkPath, ebootPath, iconPath)) {
 #endif
                         QMessageBox::information(
-                            nullptr, "Shortcut creation",
-                            QString("Shortcut created successfully!\n %1").arg(linkPath));
+                            nullptr, tr("Shortcut creation"),
+                            QString(tr("Shortcut created successfully!\n %1")).arg(linkPath));
                     } else {
                         QMessageBox::critical(
-                            nullptr, "Error",
-                            QString("Error creating shortcut!\n %1").arg(linkPath));
+                            nullptr, tr("Error"),
+                            QString(tr("Error creating shortcut!\n %1")).arg(linkPath));
                     }
                 } else {
-                    QMessageBox::critical(nullptr, "Error", "Failed to convert icon.");
+                    QMessageBox::critical(nullptr, tr("Error"), tr("Failed to convert icon."));
                 }
             } else {
                 // If the icon is already in ICO format, we just create the shortcut
@@ -196,11 +188,12 @@ public:
                 if (createShortcutLinux(linkPath, ebootPath, iconPath)) {
 #endif
                     QMessageBox::information(
-                        nullptr, "Shortcut creation",
-                        QString("Shortcut created successfully!\n %1").arg(linkPath));
+                        nullptr, tr("Shortcut creation"),
+                        QString(tr("Shortcut created successfully!\n %1")).arg(linkPath));
                 } else {
-                    QMessageBox::critical(nullptr, "Error",
-                                          QString("Error creating shortcut!\n %1").arg(linkPath));
+                    QMessageBox::critical(
+                        nullptr, tr("Error"),
+                        QString(tr("Error creating shortcut!\n %1")).arg(linkPath));
                 }
             }
         }
@@ -257,7 +250,7 @@ public:
         int itemIndex = GetRowIndex(treeWidget, currentItem);         // row
 
         QMenu menu(treeWidget);
-        QAction installPackage("Install PKG", treeWidget);
+        QAction installPackage(tr("Install PKG"), treeWidget);
 
         menu.addAction(&installPackage);
 
