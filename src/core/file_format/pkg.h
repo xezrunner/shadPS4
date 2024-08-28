@@ -149,6 +149,7 @@ public:
 private:
     Crypto crypto;
     TRP trp;
+    std::vector<u8> pkg;
     u64 pkgSize = 0;
     char pkgTitleID[9];
     PKGHeader pkgheader;
