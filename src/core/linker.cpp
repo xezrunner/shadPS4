@@ -68,9 +68,13 @@ void Linker::Execute() {
     }
 
     // Configure used flexible memory size.
-    if (auto* mem_param = GetProcParam()->mem_param) {
-        if (u64* flexible_size = mem_param->flexible_memory_size) {
-            memory->SetupMemoryRegions(*flexible_size);
+    if (const auto* proc_param = GetProcParam()) {
+        if (proc_param->entry_count >= 3) {
+            if (const auto* mem_param = proc_param->mem_param) {
+                if (const auto* flexible_size = mem_param->flexible_memory_size) {
+                    memory->SetupMemoryRegions(*flexible_size);
+                }
+            }
         }
     }
 
