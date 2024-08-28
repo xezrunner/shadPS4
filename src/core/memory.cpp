@@ -351,14 +351,19 @@ int MemoryManager::DirectQueryAvailable(PAddr search_start, PAddr search_end, si
             continue;
         }
 
-        if (dmem_area->second.size > max_size) {
-            paddr = dmem_area->second.base;
-            max_size = dmem_area->second.size;
+        const auto aligned_base = alignment > 0 ? Common::AlignUp(dmem_area->second.base, alignment)
+                                                : dmem_area->second.base;
+        const auto remaining_size =
+            dmem_area->second.size - (aligned_base - dmem_area->second.base);
+
+        if (remaining_size > max_size) {
+            paddr = aligned_base;
+            max_size = remaining_size;
         }
         dmem_area++;
     }
 
-    *phys_addr_out = alignment > 0 ? Common::AlignUp(paddr, alignment) : paddr;
+    *phys_addr_out = paddr;
     *size_out = max_size;
     return ORBIS_OK;
 }
