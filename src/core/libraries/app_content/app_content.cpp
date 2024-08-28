@@ -72,7 +72,7 @@ int PS4_SYSV_ABI sceAppContentAddcontMount(u32 service_label,
             return ORBIS_APP_CONTENT_ERROR_NOT_FOUND;
         }
 
-        snprintf(mount_point->data, ORBIS_APP_CONTENT_MOUNTPOINT_DATA_MAXSIZE, "/app0/dlc%02d", i);
+        snprintf(mount_point->data, ORBIS_APP_CONTENT_MOUNTPOINT_DATA_MAXSIZE, "/addcont%d", i);
         mnt->Mount(mount_dir, mount_point->data);
         return ORBIS_OK;
     }
