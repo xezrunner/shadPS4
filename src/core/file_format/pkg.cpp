@@ -69,7 +69,7 @@ bool PKG::Open(const std::filesystem::path& filepath) {
 
     u32 offset = pkgheader.pkg_table_entry_offset;
     u32 n_files = pkgheader.pkg_table_entry_count;
-    
+
     file.Seek(offset);
     for (int i = 0; i < n_files; i++) {
         PKGEntry entry{};
@@ -126,7 +126,7 @@ bool PKG::Extract(const std::filesystem::path& filepath, const std::filesystem::
     std::array<std::array<u8, 32>, 7> digest1;
     std::array<std::array<u8, 256>, 7> key1;
     std::array<u8, 256> imgkeydata;
-    
+
     file.Seek(offset);
     for (int i = 0; i < n_files; i++) {
         PKGEntry entry{};
@@ -332,7 +332,7 @@ bool PKG::Extract(const std::filesystem::path& filepath, const std::filesystem::
                     auto parent_path = extract_path.parent_path();
                     auto title_id = GetTitleID();
 
-                    if (parent_path.filename() != GetTitleID()) {
+                    if (parent_path.filename() != title_id) {
                         extractPaths[ndinode_counter] = parent_path / title_id;
                     } else {
                         // DLCs path has different structure

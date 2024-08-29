@@ -7,6 +7,7 @@
 #include <common/singleton.h>
 #include <core/file_format/psf.h>
 #include <core/file_sys/fs.h>
+
 #include "app_content.h"
 #include "common/io_file.h"
 #include "common/logging/log.h"
@@ -56,7 +57,7 @@ int PS4_SYSV_ABI sceAppContentAddcontEnqueueDownloadSp() {
 int PS4_SYSV_ABI sceAppContentAddcontMount(u32 service_label,
                                            const OrbisNpUnifiedEntitlementLabel* entitlement_label,
                                            OrbisAppContentMountPoint* mount_point) {
-    LOG_ERROR(Lib_AppContent, "called");
+    LOG_INFO(Lib_AppContent, "called");
 
     const auto& mount_dir = Common::FS::GetUserPath(Common::FS::PathType::AddonsDir) / title_id /
                             entitlement_label->data;
