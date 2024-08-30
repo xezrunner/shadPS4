@@ -63,11 +63,11 @@ const ComputePipeline* PipelineCache::GetComputePipeline() {
     return pipeline;
 }
 
-    // 0x3f84ec55ULL - Amplitude V_MOVRELD_B32
-    // 0x28080e22ULL - 
-    // 0xc7f34c4fULL - Amplitude V_CMPX_LE_I32
-    // 0x13a1d5fcULL - 
-    // 0xce54e4ddULL - Rock Band 4 V_MOVRELS_B32 - DO NOT USE, makes notes invisible
+// 0x3f84ec55ULL - Amplitude V_MOVRELD_B32
+// 0x28080e22ULL - 
+// 0xc7f34c4fULL - Amplitude V_CMPX_LE_I32
+// 0x13a1d5fcULL - 
+// 0xce54e4ddULL - Rock Band 4 V_MOVRELS_B32 - DO NOT USE, makes notes invisible
 
 bool ShouldSkipShader(u64 shader_hash, const char* shader_type) {
     static constexpr std::array<u64, 2> skip_hashes = {0x3f84ec55ULL, 0xc7f34c4fULL};
