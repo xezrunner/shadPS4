@@ -487,6 +487,9 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
                 }
                 break;
             }
+            case PM4ItOpcode::SetPredication: {
+                break;
+            }
             case PM4ItOpcode::PfpSyncMe: {
                 break;
             }
