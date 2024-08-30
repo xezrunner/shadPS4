@@ -38,7 +38,9 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline() {
         LOG_TRACE(Render_Vulkan, "FMask decompression pass skipped");
         return nullptr;
     }
-    RefreshGraphicsKey();
+    if (!RefreshGraphicsKey()) {
+        return nullptr;
+    }
     const auto [it, is_new] = graphics_pipelines.try_emplace(graphics_key);
     if (is_new) {
         it.value() = std::make_unique<GraphicsPipeline>(instance, scheduler, graphics_key,
@@ -49,7 +51,9 @@ const GraphicsPipeline* PipelineCache::GetGraphicsPipeline() {
 }
 
 const ComputePipeline* PipelineCache::GetComputePipeline() {
-    RefreshComputeKey();
+    if (!RefreshComputeKey()) {
+        return nullptr;
+    }
     const auto [it, is_new] = compute_pipelines.try_emplace(compute_key);
     if (is_new) {
         it.value() = std::make_unique<ComputePipeline>(instance, scheduler, *pipeline_cache,
@@ -59,7 +63,22 @@ const ComputePipeline* PipelineCache::GetComputePipeline() {
     return pipeline;
 }
 
-void PipelineCache::RefreshGraphicsKey() {
+    // 0x3f84ec55ULL - Amplitude V_MOVRELD_B32
+    // 0x28080e22ULL - 
+    // 0xc7f34c4fULL - Amplitude V_CMPX_LE_I32
+    // 0x13a1d5fcULL - 
+    // 0xce54e4ddULL - Rock Band 4 V_MOVRELS_B32 - DO NOT USE, makes notes invisible
+
+bool ShouldSkipShader(u64 shader_hash, const char* shader_type) {
+    static constexpr std::array<u64, 2> skip_hashes = {0x3f84ec55ULL, 0xc7f34c4fULL};
+    if (std::ranges::contains(skip_hashes, shader_hash)) {
+        LOG_WARNING(Render_Vulkan, "Skipped {} shader hash {:#x}.", shader_type, shader_hash);
+        return true;
+    }
+    return false;
+}
+
+bool PipelineCache::RefreshGraphicsKey() {
     auto& regs = liverpool->regs;
     auto& key = graphics_key;
 
@@ -160,18 +179,26 @@ void PipelineCache::RefreshGraphicsKey() {
             infos[i] = nullptr;
             continue;
         }
+        if (ShouldSkipShader(bininfo->shader_hash, "graphics")) {
+            return false;
+        }
         const auto stage = Shader::Stage{i};
         const GuestProgram guest_pgm{pgm, stage};
         std::tie(infos[i], modules[i], key.stage_hashes[i]) =
             shader_cache->GetProgram(guest_pgm, binding);
     }
+    return true;
 }
 
-void PipelineCache::RefreshComputeKey() {
+bool PipelineCache::RefreshComputeKey() {
     u32 binding{};
     const auto* cs_pgm = &liverpool->regs.cs_program;
     const GuestProgram guest_pgm{cs_pgm, Shader::Stage::Compute};
+    if (ShouldSkipShader(guest_pgm.hash, "compute")) {
+        return false;
+    }
     std::tie(infos[0], modules[0], compute_key) = shader_cache->GetProgram(guest_pgm, binding);
+    return true;
 }
 
 } // namespace Vulkan
