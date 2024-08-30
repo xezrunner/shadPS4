@@ -181,7 +181,7 @@
         <message>
             <location filename="../main_window_ui.h" line="318"/>
             <source>Install application from a .pkg file</source>
-            <translation>Installa applicazione da un file .pkg file</translation>
+            <translation>Installa applicazione da un file .pkg</translation>
         </message>
         <message>
             <location filename="../main_window_ui.h" line="320"/>
@@ -236,7 +236,7 @@
         <message>
             <location filename="../main_window_ui.h" line="338"/>
             <source>List View</source>
-            <translation>Visualizzazione lista</translation>
+            <translation>Visualizzazione Lista</translation>
         </message>
         <message>
             <location filename="../main_window_ui.h" line="340"/>
@@ -341,7 +341,7 @@
         <message>
             <location filename="../main_window_ui.h" line="364"/>
             <source>toolBar</source>
-            <translation>barra strumenti</translation>
+            <translation>Barra strumenti</translation>
         </message>
     </context>
     <context>
@@ -566,44 +566,34 @@
             <translation>Estrazione file PKG</translation>
         </message>
         <message>
-            <location filename="../main_window.cpp" line="633"/>
-            <source>Patch detected!\nPKG and Game versions match!: %1\nWould you like </source>
-            <translation>Patch rilevata! Il\nPKG e la versione del gioco coincidono!: %1\nVuoi </translation>
+        	<location filename="../main_window.cpp" line="646"/>
+        	<source>Patch detected!</source>
+        	<translation>Patch rilevata!</translation>
         </message>
         <message>
-            <location filename="../main_window.cpp" line="634"/>
-            <source>to overwrite?</source>
-            <translation>sovrascrivere?</translation>
+        	<location filename="../main_window.cpp" line="646"/>
+        	<source>PKG and Game versions match: </source>
+        	<translation>Le versioni di PKG e del gioco corrispondono: </translation>
         </message>
         <message>
-            <location filename="../main_window.cpp" line="639"/>
-            <source>Patch detected!\nPKG Version %1 is older </source>
-            <translation>Patch rilevata! La \nPKG Versione %1 è più vecchia </translation>
+        	<location filename="../main_window.cpp" line="647"/>
+        	<source>Would you like to overwrite?</source>
+        	<translation>Vuoi sovrascrivere?</translation>
         </message>
         <message>
-            <location filename="../main_window.cpp" line="640"/>
-            <source>than installed version!: %2\nWould you like </source>
-            <translation>della versione installata!: %2\nVuoi </translation>
+        	<location filename="../main_window.cpp" line="639"/>
+        	<source>PKG Version %1 is older than installed version: </source>
+        	<translation>La versione PKG %1 è più vecchia rispetto alla versione installata: </translation>
         </message>
         <message>
-            <location filename="../main_window.cpp" line="641"/>
-            <source>to overwrite?</source>
-            <translation>sovrascrivere?</translation>
+        	<location filename="../main_window.cpp" line="660"/>
+        	<source>Game is installed: </source>
+        	<translation>Gioco installato: </translation>
         </message>
         <message>
-            <location filename="../main_window.cpp" line="646"/>
-            <source>Patch detected!\nGame is installed: %1\nWould you like </source>
-            <translation>Patch rilevata!\nGioco installato: %1\Vuoi </translation>
-        </message>
-        <message>
-            <location filename="../main_window.cpp" line="647"/>
-            <source>to install Patch: %2?</source>
-            <translation>installare la Patch: %2?</translation>
-        </message>
-        <message>
-            <location filename="../main_window.cpp" line="659"/>
-            <source>Game already installed\n%1\nWould you like to overwrite?</source>
-            <translation>Gioco già installato\n%1\nVuoi sovrascrivere??</translation>
+        	<location filename="../main_window.cpp" line="660"/>
+        	<source>Would you like to install Patch: </source>
+        	<translation>Vuoi installare la patch: </translation>
         </message>
         <message>
             <location filename="../main_window.cpp" line="673"/>
@@ -614,6 +604,16 @@
             <location filename="../main_window.cpp" line="674"/>
             <source>Would you like to install DLC: %1?</source>
             <translation>Vuoi installare il DLC: %1?</translation>
+        </message>
+        <message>
+            <location filename="../main_window.cpp" line="688"/>
+            <source>DLC already installed:</source>
+            <translation>DLC già installato:</translation>
+        </message>
+        <message>
+            <location filename="../main_window.cpp" line="701"/>
+            <source>Game already installed</source>
+            <translation>Gioco già installato</translation>
         </message>
         <message>
             <location filename="../main_window.cpp" line="674"/>
@@ -651,12 +651,12 @@
         <message>
             <location filename="../cheats_patches.cpp" line="44"/>
             <source>Cheats / Patches</source>
-            <translation>Cheat / Patch</translation>
+            <translation>Trucchi / Patch</translation>
         </message>
         <message>
             <location filename="../cheats_patches.cpp" line="50"/>
             <source>defaultTextEdit_MSG</source>
-            <translation>I cheats/patches sono sperimentali.\nUtilizzali con cautela.\n\nScarica i cheats singolarmente selezionando il repository e cliccando sul pulsante di download.\nNella scheda Patches, puoi scaricare tutti i patch in una volta sola, scegliere quali vuoi utilizzare e salvare la tua selezione.\n\nPoiché non sviluppiamo i Cheats/Patches,\nper favore segnala i problemi all'autore del cheat.\n\nHai creato un nuovo cheat? Visita:\nhttps://github.com/shadps4-emu/ps4_cheats</translation>
+            <translation>I trucchi e le patch sono sperimentali.\nUtilizzali con cautela.\n\nScarica i trucchi singolarmente selezionando l'archivio e cliccando sul pulsante di download.\nNella scheda Patch, puoi scaricare tutte le patch in una volta sola, scegliere quali vuoi utilizzare e salvare la tua selezione.\n\nPoiché non sviluppiamo i trucchi e le patch,\nper favore segnala i problemi all'autore dei trucchi.\n\nHai creato un nuovo trucco? Visita:\nhttps://github.com/shadps4-emu/ps4_cheats</translation>
         </message>
         <message>
             <location filename="../cheats_patches.cpp" line="69"/>

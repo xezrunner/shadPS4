@@ -10,6 +10,7 @@
 #include "common/thread.h"
 #include "core/aerolib/aerolib.h"
 #include "core/aerolib/stubs.h"
+#include "core/cpu_patches.h"
 #include "core/libraries/kernel/memory_management.h"
 #include "core/libraries/kernel/thread_management.h"
 #include "core/linker.h"
@@ -81,6 +82,7 @@ void Linker::Execute() {
     // Init primary thread.
     Common::SetCurrentThreadName("GAME_MainThread");
     Libraries::Kernel::pthreadInitSelfMainThread();
+    InitializeThreadPatchStack();
     InitTlsForThread(true);
 
     // Start shared library modules
@@ -100,6 +102,8 @@ void Linker::Execute() {
             RunMainEntry(m->GetEntryAddress(), &p, ProgramExitFunc);
         }
     }
+
+    CleanupThreadPatchStack();
 }
 
 s32 Linker::LoadModule(const std::filesystem::path& elf_name, bool is_dynamic) {
