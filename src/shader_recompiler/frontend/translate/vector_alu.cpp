@@ -997,7 +997,10 @@ void Translator::V_MOVRELS_B32(const GcnInst& inst) {
     const IR::U32 src0{GetSrc(inst.src[0])};
     const IR::U32 dst_idx{GetSrc(inst.dst[0])};
     // Seems wrong way to "load" m0
-    const IR::U32 src_idx = ir.IAdd(src0, m0_value);
+    IR::U32 src_idx = src0;
+    if (!m0_value.IsEmpty()) {
+        src_idx = ir.IAdd(src_idx, m0_value);
+    }
     IR::U32 src_val = ir.Imm32(0xdeadbeef);
 
     ASSERT(info.num_allocated_vgprs > 0);
