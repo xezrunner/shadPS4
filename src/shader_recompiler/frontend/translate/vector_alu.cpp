@@ -309,6 +309,8 @@ void Translator::EmitVectorAlu(const GcnInst& inst) {
         return V_MBCNT_U32_B32(true, inst);
     case Opcode::V_MBCNT_HI_U32_B32:
         return V_MBCNT_U32_B32(false, inst);
+    case Opcode::V_MOVRELS_B32:
+        return V_MOVRELS_B32(inst);
     case Opcode::V_NOP:
         return;
 
@@ -987,6 +989,32 @@ void Translator::V_FFBH_U32(const GcnInst& inst) {
     // Select 0xFFFFFFFF if src0 was 0
     const IR::U1 cond = ir.INotEqual(src0, ir.Imm32(0));
     SetDst(inst.dst[0], IR::U32{ir.Select(cond, pos_from_left, ir.Imm32(~0U))});
+}
+
+void Translator::V_MOVRELS_B32(const GcnInst& inst) {
+    // Weird format
+    // VGPR[D.u] = VGPR[S0.u + M0.u]
+    const IR::U32 src0{GetSrc(inst.src[0])};
+    const IR::U32 dst_idx{GetSrc(inst.dst[0])};
+    // Seems wrong way to "load" m0
+    const IR::U32 src_idx = ir.IAdd(src0, m0_value);
+    IR::U32 src_val = ir.Imm32(0xdeadbeef);
+
+    ASSERT(info.num_allocated_vgprs > 0);
+    // Emulate switch stmt to index the VGPRs by src_idx to read
+    for (u32 i = 0; i < info.num_allocated_vgprs; i++) {
+        const IR::U1 cond = ir.IEqual(src_idx, ir.Imm32(i));
+        src_val =
+            IR::U32{ir.Select(cond, ir.GetVectorReg<IR::U32>(IR::VectorReg::V0 + i), src_val)};
+    }
+
+    // Emulate switch stmt to index the VGPRs by dst_idx to write
+    for (u32 i = 0; i < info.num_allocated_vgprs; i++) {
+        const IR::U1 cond = ir.IEqual(dst_idx, ir.Imm32(i));
+        IR::U32 dst_val =
+            IR::U32{ir.Select(cond, src_val, ir.GetVectorReg<IR::U32>(IR::VectorReg::V0 + i))};
+        ir.SetVectorReg(IR::VectorReg::V0 + i, src_val);
+    }
 }
 
 } // namespace Shader::Gcn
