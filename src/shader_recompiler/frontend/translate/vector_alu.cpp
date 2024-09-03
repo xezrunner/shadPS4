@@ -996,15 +996,12 @@ void Translator::V_FFBH_U32(const GcnInst& inst) {
 void Translator::V_MOVRELS_B32(const GcnInst& inst) {
     // Weird format
     // VGPR[D.u] = VGPR[S0.u + M0.u]
-    const IR::U32 src0{GetSrc(inst.src[0])};
+    IR::U32 src_idx{GetSrc(inst.src[0])};
     const IR::U32 dst_idx{GetSrc(inst.dst[0])};
-    // Seems wrong way to "load" m0
-    IR::U32 src_idx = src0;
-    if (!m0_value.IsEmpty()) {
-        src_idx = ir.IAdd(src_idx, m0_value);
-    }
-    IR::U32 src_val = ir.Imm32(0xdeadbeef);
 
+    src_idx = ir.IAdd(src_idx, ir.GetM0());
+
+    IR::U32 src_val = ir.Imm32(0xdeadbeef);
     ASSERT(info.num_allocated_vgprs > 0);
     // Emulate switch stmt to index the VGPRs by src_idx to read
     for (u32 i = 0; i < info.num_allocated_vgprs; i++) {
@@ -1027,12 +1024,10 @@ void Translator::V_MOVRELD_B32(const GcnInst& inst) {
     // VGPR[dst+m0] = VGPR[src]
     const IR::U32 src_idx{GetSrc(inst.src[0])};
     IR::U32 dst_idx{GetSrc(inst.dst[0])};
-    // Seems wrong way to "load" m0
-    if (!m0_value.IsEmpty()) {
-        dst_idx = ir.IAdd(dst_idx, m0_value);
-    }
-    IR::U32 src_val = ir.Imm32(0xdeadbeef);
 
+    dst_idx = ir.IAdd(dst_idx, ir.GetM0());
+
+    IR::U32 src_val = ir.Imm32(0xdeadbeef);
     ASSERT(info.num_allocated_vgprs > 0);
     // Emulate switch stmt to index the VGPRs by src_idx to read
     for (u32 i = 0; i < info.num_allocated_vgprs; i++) {
