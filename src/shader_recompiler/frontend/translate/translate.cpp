@@ -151,10 +151,11 @@ T Translator::GetSrc(const InstOperand& operand) {
         break;
     case OperandField::M0:
         if constexpr (is_float) {
-            UNREACHABLE();
+            value = ir.BitCast<IR::F32>(ir.GetM0());
         } else {
-            return m0_value;
+            value = ir.GetM0();
         }
+        break;
     default:
         UNREACHABLE();
     }

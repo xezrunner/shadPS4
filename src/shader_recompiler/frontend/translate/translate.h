@@ -240,7 +240,6 @@ private:
     IR::IREmitter ir;
     Info& info;
     const Profile& profile;
-    IR::U32 m0_value;
     bool opcode_missing = false;
 };
 
