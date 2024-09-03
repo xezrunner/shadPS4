@@ -1015,7 +1015,7 @@ void Translator::V_MOVRELS_B32(const GcnInst& inst) {
         const IR::U1 cond = ir.IEqual(dst_idx, ir.Imm32(i));
         IR::U32 dst_val =
             IR::U32{ir.Select(cond, src_val, ir.GetVectorReg<IR::U32>(IR::VectorReg::V0 + i))};
-        ir.SetVectorReg(IR::VectorReg::V0 + i, src_val);
+        ir.SetVectorReg(IR::VectorReg::V0 + i, dst_val);
     }
 }
 
@@ -1041,7 +1041,7 @@ void Translator::V_MOVRELD_B32(const GcnInst& inst) {
         const IR::U1 cond = ir.IEqual(dst_idx, ir.Imm32(i));
         IR::U32 dst_val =
             IR::U32{ir.Select(cond, src_val, ir.GetVectorReg<IR::U32>(IR::VectorReg::V0 + i))};
-        ir.SetVectorReg(IR::VectorReg::V0 + i, src_val);
+        ir.SetVectorReg(IR::VectorReg::V0 + i, dst_val);
     }
 }
 
