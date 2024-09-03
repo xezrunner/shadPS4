@@ -193,6 +193,7 @@ public:
     void V_FFBH_U32(const GcnInst& inst);
     void V_MOVRELS_B32(const GcnInst& inst);
     void V_MOVRELD_B32(const GcnInst& inst);
+    void V_MOVRELSD_B32(const GcnInst& inst);
 
     // Vector Memory
     void BUFFER_LOAD(u32 num_dwords, bool is_typed, const GcnInst& inst);
@@ -233,6 +234,8 @@ private:
     [[nodiscard]] T GetSrc64(const InstOperand& operand);
     void SetDst(const InstOperand& operand, const IR::U32F32& value);
     void SetDst64(const InstOperand& operand, const IR::U64F64& value_raw);
+
+    void VMovRelHelper(const IR::U32 src_idx, const IR::U32 dst_idx);
 
     void LogMissingOpcode(const GcnInst& inst);
 
