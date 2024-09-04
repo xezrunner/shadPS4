@@ -20,6 +20,7 @@
       "cmakeCommandArgs": "",
       "buildCommandArgs": "",
       "ctestCommandArgs": "",
+      "intelliSenseMode": "windows-clang-x64",
       "inheritEnvironments": [ "clang_cl_x64_x64" ]
     },
     {

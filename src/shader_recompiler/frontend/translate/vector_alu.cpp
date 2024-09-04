@@ -315,6 +315,8 @@ void Translator::EmitVectorAlu(const GcnInst& inst) {
         return V_MOVRELD_B32(inst);
     case Opcode::V_MOVRELSD_B32:
         return V_MOVRELSD_B32(inst);
+    case Opcode::V_CMPX_LE_I32:
+        return V_CMP_U32(ConditionOp::LE, true, true, inst);
     case Opcode::V_NOP:
         return;
 
