@@ -152,6 +152,7 @@ struct Info {
     ImageResourceList images;
     SamplerResourceList samplers;
 
+    u32 num_allocated_vgprs;
     std::span<const u32> user_data;
     Stage stage;
 
