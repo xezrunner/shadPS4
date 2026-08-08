@@ -115,6 +115,14 @@ void BufferCache::DownloadBufferMemory(Buffer& buffer, VAddr device_addr, u64 si
         return;
     }
     const auto [download, offset] = download_buffer.Map(total_size_bytes);
+    if (download == nullptr) {
+        // Recording the copy against an allocation that was never made has the GPU write past the
+        // end of the download buffer, which loses the device. Drop the download instead; the
+        // region stays marked, so a later read faults again and retries.
+        LOG_WARNING(Render_Vulkan, "Skipped {} byte download, staging buffer could not satisfy it",
+                    total_size_bytes);
+        return;
+    }
     for (auto& copy : copies) {
         // Modify copies to have the staging offset in mind
         copy.dstOffset += offset;
@@ -123,10 +131,11 @@ void BufferCache::DownloadBufferMemory(Buffer& buffer, VAddr device_addr, u64 si
     scheduler.EndRendering();
     const auto cmdbuf = scheduler.CommandBuffer();
     cmdbuf.copyBuffer(buffer.buffer, download_buffer.Handle(), copies);
-    const auto write_data = [&]() {
-        auto* memory = Core::Memory::Instance();
+    // Captured by value: when deferred, this outlives the frame that recorded the copy.
+    const auto write_data = [this, copies, download, offset, buffer_addr = buffer.CpuAddr(),
+                             device_addr, size, is_write] {
         for (const auto& copy : copies) {
-            const VAddr copy_device_addr = buffer.CpuAddr() + copy.srcOffset;
+            const VAddr copy_device_addr = buffer_addr + copy.srcOffset;
             const u64 dst_offset = copy.dstOffset - offset;
             memory->TryWriteBacking(std::bit_cast<u8*>(copy_device_addr), download + dst_offset,
                                     copy.size);
