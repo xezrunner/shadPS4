@@ -26,8 +26,9 @@ static constexpr size_t WritebackBufferSize = 96_MB;
 static constexpr size_t UboStreamBufferSize = 64_MB;
 static constexpr size_t DeviceBufferSize = 128_MB;
 
-// Writes past this are bulk GPU output (streamout, particle vertices), not the small control
-// blocks readback consumers poll, and copying them costs far more than it can be worth.
+// Writes up to this size are the small control blocks readback consumers poll (counters, emitter
+// headers); with readbacks disabled they are read-guarded and served at read time. Writes past it
+// are bulk GPU output (streamout, particle state), delivered by the async writeback instead.
 static constexpr u64 WritebackWriteLimit = 1_MB;
 // Sized so one boundary can carry the bulk output a frame produces; the double-buffered particle
 // state Second Son round-trips is 12MB per copy, and dropping a piece that never fits would lose
@@ -98,9 +99,49 @@ void BufferCache::InvalidateMemory(VAddr device_addr, u64 size) {
 
 void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write) {
     liverpool->SendCommand<true>([this, device_addr, size, is_write] {
+        if (!is_write && ServeReadFromWriteback(device_addr, size)) {
+            return;
+        }
         Buffer& buffer = slot_buffers[FindBuffer(device_addr, size)];
         DownloadBufferMemory<false>(buffer, device_addr, size, is_write);
     });
+}
+
+// A guarded poll follows a fence the guest was shown at command-processing time, so the write it
+// wants may still be sitting unsubmitted in the current frame. Recording the writeback right now
+// and waiting out that one tick serves the read with the exact post-fence value, and delivering
+// the whole batch unguards every other control block with it -- one GPU wait covers the frame's
+// polls, where a download would pay a full drain for each.  :async-buffer-writeback
+bool BufferCache::ServeReadFromWriteback(VAddr device_addr, u64 size) {
+    if (!async_writeback) {
+        return false;
+    }
+    DeliverCompletedWritebacks();
+    RecordGpuWriteback();
+    const VAddr end = device_addr + size;
+    u64 wait_tick = 0;
+    bool covered = false;
+    for (const auto& batch : pending_writebacks) {
+        for (const auto& wb : batch.writebacks) {
+            if (wb.device_addr < end && device_addr < wb.device_addr + wb.size) {
+                covered = true;
+                wait_tick = batch.tick;
+                break;
+            }
+        }
+    }
+    if (!covered) {
+        // A word the guest wrote itself never comes back from the GPU; its own write is the
+        // value, so the guard has nothing left to hold the read for.
+        if (memory_tracker->IsRegionCpuModified(device_addr, size)) {
+            memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
+            return true;
+        }
+        return false;
+    }
+    scheduler.Wait(wait_tick);
+    DeliverCompletedWritebacks();
+    return true;
 }
 
 template <bool async>
@@ -177,9 +218,9 @@ void BufferCache::MarkGpuWritten(VAddr device_addr, u64 size) {
     if (!async_writeback) {
         return;
     }
-    // With readbacks disabled the writeback is the only path GPU output has back to the guest,
-    // so record every write; bulk output (particle state) matters as much as the small control
-    // blocks. Relaxed mode keeps only the small writes.
+    // With readbacks disabled every write is recorded: the small control blocks both deliver at
+    // submit boundaries and back the guarded read faults, and the bulk output has no other way to
+    // reach the guest. Relaxed mode keeps only the small writes.
     if (EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Disabled ||
         size <= WritebackWriteLimit) {
         gpu_written_ranges.Add(device_addr, size);
@@ -234,6 +275,11 @@ void BufferCache::DeliverCompletedWritebacks() {
                     cursor = owned_end;
                 });
             deliver_upto(range_end);
+            // Dropping the guard here, batch-wide, is what keeps the fault rate down: the first
+            // poll of a frame pays the wait, and every other control block the batch carried
+            // reads on without faulting. Guest-written parts count as served too -- the guest's
+            // own value outranks the snapshot.
+            memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
         }
         pending_writebacks.pop_front();
     }
@@ -832,8 +878,14 @@ bool BufferCache::SynchronizeBuffer(Buffer& buffer, VAddr device_addr, u32 size,
     size_t total_size_bytes = 0;
     VAddr buffer_start = buffer.CpuAddr();
     vk::Buffer src_buffer = VK_NULL_HANDLE;
+    // Small written bindings are the control blocks readback consumers poll (counters, emitter
+    // headers); with readbacks disabled, guard them so a guest read faults and is served exact
+    // data at read time. Bulk output stays unguarded and reaches the guest through the async
+    // writeback instead.
+    const bool guard = is_written && size <= WritebackWriteLimit &&
+                       EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Disabled;
     memory_tracker->ForEachUploadRange(
-        device_addr, size, is_written,
+        device_addr, size, is_written, guard,
         [&](u64 device_addr_out, u64 range_size) {
             copies.emplace_back(total_size_bytes, device_addr_out - buffer_start, range_size);
             total_size_bytes += range_size;

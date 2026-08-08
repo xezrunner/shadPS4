@@ -35,6 +35,7 @@ public:
         : tracker{tracker_}, cpu_addr{cpu_addr_} {
         cpu.Fill();
         gpu.Clear();
+        guarded.Clear();
         writeable.Fill();
         readable.Fill();
     }
@@ -77,7 +78,8 @@ public:
      * @param size          Size in bytes to mark or unmark as modified
      */
     template <Type type, bool enable>
-    void ChangeRegionState(u64 dirty_addr, u64 size) noexcept(type == Type::GPU) {
+    void ChangeRegionState(u64 dirty_addr, u64 size, bool guard = false) noexcept(type ==
+                                                                                  Type::GPU) {
         RENDERER_TRACE;
         const size_t offset = dirty_addr - cpu_addr;
         const size_t start_page = SanitizeAddress(offset) / TRACKER_BYTES_PER_PAGE;
@@ -93,9 +95,22 @@ public:
         } else {
             bits.UnsetRange(start_page, end_page);
         }
+        if constexpr (type == Type::GPU) {
+            // Guarded pages are the small GPU-written control blocks that must be served at read
+            // time even with readbacks disabled; see :async-buffer-writeback.
+            if constexpr (enable) {
+                if (guard) {
+                    guarded.SetRange(start_page, end_page);
+                }
+            } else {
+                guarded.UnsetRange(start_page, end_page);
+            }
+        }
         if constexpr (type == Type::CPU) {
             UpdateProtection<!enable, false>();
         } else if (EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Precise) {
+            UpdateProtection<enable, true>();
+        } else if (EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Disabled) {
             UpdateProtection<enable, true>();
         }
     }
@@ -126,7 +141,8 @@ public:
             bits.UnsetRange(start_page, end_page);
             if constexpr (type == Type::CPU) {
                 UpdateProtection<true, false>();
-            } else if (EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Disabled) {
+            } else {
+                guarded.UnsetRange(start_page, end_page);
                 UpdateProtection<false, true>();
             }
         }
@@ -157,6 +173,18 @@ public:
         return test.Any();
     }
 
+    /// Returns true when any page in the region is a guarded (read-protected) control block
+    [[nodiscard]] bool IsRegionGuarded(u64 offset, u64 size) noexcept {
+        const size_t start_page = SanitizeAddress(offset) / TRACKER_BYTES_PER_PAGE;
+        const size_t end_page =
+            Common::DivCeil(SanitizeAddress(offset + size), TRACKER_BYTES_PER_PAGE);
+        if (start_page >= NUM_PAGES_PER_REGION || end_page <= start_page) {
+            return false;
+        }
+        RegionBits test(guarded, start_page, end_page);
+        return test.Any();
+    }
+
     LockType lock;
 
 private:
@@ -172,12 +200,16 @@ private:
     template <bool track, bool is_read>
     void UpdateProtection() {
         RENDERER_TRACE;
-        RegionBits mask = is_read ? (~gpu ^ readable) : (cpu ^ writeable);
+        // With readbacks disabled only the guarded control blocks are read-protected; Precise
+        // mode protects every GPU-modified page.
+        const RegionBits& read_source =
+            EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Precise ? gpu : guarded;
+        RegionBits mask = is_read ? (~read_source ^ readable) : (cpu ^ writeable);
         if (mask.None()) {
             return;
         }
         if constexpr (is_read) {
-            readable = ~gpu;
+            readable = ~read_source;
         } else {
             writeable = cpu;
         }
@@ -188,6 +220,7 @@ private:
     VAddr cpu_addr = 0;
     RegionBits cpu;
     RegionBits gpu;
+    RegionBits guarded;
     RegionBits writeable;
     RegionBits readable;
 };

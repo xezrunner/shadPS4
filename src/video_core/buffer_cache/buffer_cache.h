@@ -182,6 +182,8 @@ private:
 
     void RecordGpuWriteback();
 
+    bool ServeReadFromWriteback(VAddr device_addr, u64 size);
+
     [[nodiscard]] OverlapResult ResolveOverlaps(VAddr device_addr, u32 wanted_size);
 
     void JoinOverlap(BufferId new_buffer_id, BufferId overlap_id, bool accumulate_stream_score);
