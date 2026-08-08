@@ -34,6 +34,7 @@ enum class ActionKind : u32 {
     MaxAllPowerRanks,
     SetSimulationSpeed,
     LoadWorld,
+    SetTimeOfDay,
 };
 
 enum class ActionState : u32 {
@@ -50,6 +51,7 @@ enum class ActionOutcome : u32 {
     NoPowerSkillsFound,
     WorldLoaderUnavailable,
     WorldTransitionRejected,
+    TimeOfDayUnavailable,
 };
 
 struct PowerChoice {
@@ -99,6 +101,10 @@ constexpr uintptr_t QueueWorldTransitionAddress = 0x0150BA20;
 constexpr uintptr_t CreateGuestStringAddress = 0x0160D650;
 constexpr uintptr_t CurrentCoreNameAddress = 0x08F2D258;
 constexpr uintptr_t CurrentWorldNameAddress = 0x08F2D280;
+constexpr uintptr_t TimeOfDayManagerAddress = 0x08F8E800;
+constexpr uintptr_t SetTimeOfDayAddress = 0x0159D420;
+constexpr u64 VillageSunbreakTimeOfDay = 0x813C8B799E4714EE;
+constexpr u64 VillageHazySunsetTimeOfDay = 0xE619CD89B5FD4FC4;
 constexpr s32 LastPowerSkill = 0xDD;
 
 // Dash telemetry globals.
@@ -251,6 +257,7 @@ uintptr_t eboot_base_address = 0;
 ActionKind pending_action = ActionKind::None;
 s32 pending_power = 0;
 std::array<char, WorldNameCapacity> pending_world{};
+u64 pending_time_of_day = 0;
 float pending_simulation_speed = 1.0f;
 float simulation_speed = 1.0f;
 std::atomic<ActionState> action_state = ActionState::Idle;
@@ -329,6 +336,7 @@ using DestroyWorldTransitionRequest = void PS4_SYSV_ABI (*)(void* request);
 using QueueWorldTransition = u8 PS4_SYSV_ABI (*)(void* world_manager, void* request,
                                                  WorldTransitionContext* context);
 using CreateGuestString = void PS4_SYSV_ABI (*)(u16** result, const char* text, u64 length);
+using SetTimeOfDay = void PS4_SYSV_ABI (*)(void* manager, u64 stable_id);
 
 std::string ToLower(std::string_view text) {
     std::string lowered{text};
@@ -501,6 +509,17 @@ ActionOutcome ExecuteWorldTransition(std::string_view world) {
     return ActionOutcome::WorldTransitionRejected;
 }
 
+ActionOutcome ExecuteTimeOfDay(u64 stable_id) {
+    const uintptr_t manager = GuestAddress(TimeOfDayManagerAddress);
+    if (!IsReadable(manager, 0x50)) {
+        return ActionOutcome::TimeOfDayUnavailable;
+    }
+
+    GuestFunction<SetTimeOfDay>(SetTimeOfDayAddress)(reinterpret_cast<void*>(manager), stable_id);
+    LOG_INFO(Debug, "Selected Second Son time-of-day stable ID {:#018x}", stable_id);
+    return ActionOutcome::Succeeded;
+}
+
 // Queues an action for the guest game thread; the payload (pending_power / pending_world) must be
 // set before calling. Returns false when an action is already in flight.
 bool QueueAction(ActionKind kind) {
@@ -536,6 +555,9 @@ void DrainPendingAction() {
         break;
     case ActionKind::LoadWorld:
         outcome = ExecuteWorldTransition(pending_world.data());
+        break;
+    case ActionKind::SetTimeOfDay:
+        outcome = ExecuteTimeOfDay(pending_time_of_day);
         break;
     case ActionKind::None:
         break;
@@ -873,6 +895,8 @@ const char* OutcomeText(ActionOutcome outcome) {
         return "World load rejected: the retail world manager or request strings are not ready.";
     case ActionOutcome::WorldTransitionRejected:
         return "World load rejected: another retail transition is already in flight.";
+    case ActionOutcome::TimeOfDayUnavailable:
+        return "Time of day was not changed: the retail manager is not ready.";
     }
     return nullptr;
 }
@@ -976,6 +1000,21 @@ void DrawWorldLoader() {
         ImGui::PopID();
     }
     ImGui::EndTable();
+
+    ImGui::SeparatorText("Village lighting");
+    ImGui::TextDisabled(
+        "Retail presets from world_village.xpps; apply after Village finishes loading.");
+    ImGui::BeginDisabled(busy || current != "world_village");
+    if (ImGui::SmallButton("Apply Sunbreak")) {
+        pending_time_of_day = VillageSunbreakTimeOfDay;
+        QueueAction(ActionKind::SetTimeOfDay);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Apply Hazy Sunset")) {
+        pending_time_of_day = VillageHazySunsetTimeOfDay;
+        QueueAction(ActionKind::SetTimeOfDay);
+    }
+    ImGui::EndDisabled();
 }
 
 const char* DashStateName(s32 state) {
