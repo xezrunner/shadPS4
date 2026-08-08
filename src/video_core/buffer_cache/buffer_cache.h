@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <deque>
+#include <mutex>
 #include <boost/container/small_vector.hpp>
 #include "common/lru_cache.h"
 #include "common/slot_vector.h"
@@ -115,6 +117,10 @@ public:
     /// Hands buffer data the GPU produced during the last submit back to guest memory.
     void WritebackGpuData();
 
+    /// Submits pending GPU written ranges at guest fence signal time so the poll that follows
+    /// the fence only has to wait for the priority delivery, not the whole command processor.
+    void CommitPendingWriteback();
+
     /// Binds host vertex buffers for the current draw.
     void BindVertexBuffers(const Vulkan::GraphicsPipeline& pipeline);
 
@@ -180,9 +186,11 @@ private:
 
     void DeliverCompletedWritebacks();
 
-    void RecordGpuWriteback();
+    bool RecordGpuWriteback();
 
     bool ServeReadFromWriteback(VAddr device_addr, u64 size);
+
+    bool TryServeFromFlushedWriteback(VAddr device_addr, u64 size);
 
     [[nodiscard]] OverlapResult ResolveOverlaps(VAddr device_addr, u32 wanted_size);
 
@@ -244,6 +252,10 @@ private:
     Common::LeastRecentlyUsedCache<BufferId, u64> lru_cache;
     RangeSet gpu_modified_ranges;
     RangeSet gpu_written_ranges;
+    // Guards pending_writebacks: recorded on the GPU thread, delivered from the scheduler's
+    // priority thread, and scanned by guest threads serving read faults.
+    std::mutex writeback_mutex;
+    std::condition_variable writeback_cv;
     std::deque<WritebackBatch> pending_writebacks;
     bool async_writeback = false;
     SplitRangeMap<BufferId> buffer_ranges;

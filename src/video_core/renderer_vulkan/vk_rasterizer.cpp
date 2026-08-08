@@ -369,6 +369,10 @@ void Rasterizer::Finish() {
     scheduler.Finish();
 }
 
+void Rasterizer::CommitPendingWriteback() {
+    buffer_cache.CommitPendingWriteback();
+}
+
 void Rasterizer::OnSubmit() {
     if (fault_process_pending) {
         fault_process_pending = false;
