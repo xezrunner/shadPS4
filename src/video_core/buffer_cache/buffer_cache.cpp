@@ -20,15 +20,19 @@ namespace VideoCore {
 static constexpr size_t DataShareBufferSize = 64_KB;
 static constexpr size_t StagingBufferSize = 512_MB;
 static constexpr size_t DownloadBufferSize = 32_MB;
-static constexpr size_t WritebackBufferSize = 32_MB;
+// Host-visible ring; must hold MaxWritebackBatches full budgets so a batch cannot be overwritten
+// before it has been handed over.
+static constexpr size_t WritebackBufferSize = 96_MB;
 static constexpr size_t UboStreamBufferSize = 64_MB;
 static constexpr size_t DeviceBufferSize = 128_MB;
 
 // Writes past this are bulk GPU output (streamout, particle vertices), not the small control
 // blocks readback consumers poll, and copying them costs far more than it can be worth.
 static constexpr u64 WritebackWriteLimit = 1_MB;
-// Held well under the ring so a batch cannot be overwritten before it has been handed over.
-static constexpr u64 WritebackBudget = 8_MB;
+// Sized so one boundary can carry the bulk output a frame produces; the double-buffered particle
+// state Second Son round-trips is 12MB per copy, and dropping a piece that never fits would lose
+// the only path that data has back to the guest.
+static constexpr u64 WritebackBudget = 40_MB;
 static constexpr size_t MaxWritebackBatches = 2;
 
 BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
@@ -163,7 +167,14 @@ void BufferCache::MarkGpuWritten(VAddr device_addr, u64 size) {
     // neighbours. Control blocks the guest polls tend to sit right next to the bulk output they
     // describe, so once merged a 256 byte counter block is indistinguishable from the megabytes of
     // particle vertices beside it, and filtering after the merge throws out both.
-    if (async_writeback && size <= WritebackWriteLimit) {
+    if (!async_writeback) {
+        return;
+    }
+    // With readbacks disabled the writeback is the only path GPU output has back to the guest,
+    // so record every write; bulk output (particle state) matters as much as the small control
+    // blocks. Relaxed mode keeps only the small writes.
+    if (EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Disabled ||
+        size <= WritebackWriteLimit) {
         gpu_written_ranges.Add(device_addr, size);
     }
 }
