@@ -141,7 +141,16 @@ bool ComputePipeline::SerializationSupport::Deserialize(Serialization::Archive& 
 }
 
 bool PipelineCache::LoadComputePipeline(Serialization::Archive& ar) {
+    infos.fill(nullptr);
+    modules.fill(nullptr);
+    fetch_shader.reset();
+
     compute_key.Deserialize(ar);
+    if (compute_pipelines.contains(compute_key)) {
+        LOG_WARNING(Render_Vulkan, "Skipping duplicate cached compute pipeline {:#x}",
+                    compute_key.value);
+        return false;
+    }
 
     ComputePipeline::SerializationSupport sdata{};
     sdata.Deserialize(ar);
@@ -160,7 +169,11 @@ bool PipelineCache::LoadComputePipeline(Serialization::Archive& ar) {
     }
 
     const auto [it, is_new] = compute_pipelines.try_emplace(compute_key);
-    ASSERT(is_new);
+    if (!is_new) {
+        LOG_WARNING(Render_Vulkan, "Skipping duplicate cached compute pipeline {:#x}",
+                    compute_key.value);
+        return false;
+    }
 
     it.value() =
         std::make_unique<ComputePipeline>(instance, scheduler, desc_heap, profile, *pipeline_cache,
@@ -209,7 +222,16 @@ bool GraphicsPipeline::SerializationSupport::Deserialize(Serialization::Archive&
 }
 
 bool PipelineCache::LoadGraphicsPipeline(Serialization::Archive& ar) {
+    infos.fill(nullptr);
+    modules.fill(nullptr);
+    fetch_shader.reset();
+
     graphics_key.Deserialize(ar);
+    if (graphics_pipelines.contains(graphics_key)) {
+        LOG_WARNING(Render_Vulkan, "Skipping duplicate cached graphics pipeline {:#x}",
+                    std::hash<GraphicsPipelineKey>{}(graphics_key));
+        return false;
+    }
 
     GraphicsPipeline::SerializationSupport sdata{};
     sdata.Deserialize(ar);
@@ -235,7 +257,11 @@ bool PipelineCache::LoadGraphicsPipeline(Serialization::Archive& ar) {
     }
 
     const auto [it, is_new] = graphics_pipelines.try_emplace(graphics_key);
-    ASSERT(is_new);
+    if (!is_new) {
+        LOG_WARNING(Render_Vulkan, "Skipping duplicate cached graphics pipeline {:#x}",
+                    std::hash<GraphicsPipelineKey>{}(graphics_key));
+        return false;
+    }
 
     it.value() = std::make_unique<GraphicsPipeline>(
         instance, scheduler, desc_heap, profile, graphics_key, *pipeline_cache, infos,
@@ -271,22 +297,31 @@ bool PipelineCache::LoadPipelineStage(Serialization::Archive& ar, size_t stage) 
     vk::ShaderModule module{};
 
     auto [it_pgm, new_program] = program_cache.try_emplace(program->info.pgm_hash);
+    bool insert_permutation = new_program;
     if (new_program) {
         module = CompileSPV(spv, instance.GetDevice());
         it_pgm.value() = std::move(program);
     } else {
         const auto& it = std::ranges::find(it_pgm.value()->modules, spec, &Program::Module::spec);
         if (it != it_pgm.value()->modules.end()) {
-            // If the permutation is already preloaded, make sure it has the same permutation index
             const auto idx = std::distance(it_pgm.value()->modules.begin(), it);
-            ASSERT_MSG(perm_idx == idx, "Permutation {} is already inserted at {}! ({}_{:x})",
-                       perm_idx, idx, program->info.stage, program->info.pgm_hash);
+            if (perm_idx != idx) {
+                LOG_WARNING(Render_Vulkan,
+                            "Skipping cached shader permutation {} at conflicting index {} "
+                            "({}_{:x})",
+                            perm_idx, idx, program->info.stage, program->info.pgm_hash);
+                return false;
+            }
             module = it->module;
         } else {
             module = CompileSPV(spv, instance.GetDevice());
+            insert_permutation = true;
         }
+        spec.info = &it_pgm.value()->info;
     }
-    it_pgm.value()->InsertPermut(module, std::move(spec), perm_idx);
+    if (insert_permutation) {
+        it_pgm.value()->InsertPermut(module, std::move(spec), perm_idx);
+    }
 
     infos[stage] = &it_pgm.value()->info;
     modules[stage] = module;
