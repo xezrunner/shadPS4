@@ -20,15 +20,15 @@ namespace VideoCore {
 static constexpr size_t DataShareBufferSize = 64_KB;
 static constexpr size_t StagingBufferSize = 512_MB;
 static constexpr size_t DownloadBufferSize = 32_MB;
-static constexpr size_t WritebackBufferSize = 16_MB;
+static constexpr size_t WritebackBufferSize = 32_MB;
 static constexpr size_t UboStreamBufferSize = 64_MB;
 static constexpr size_t DeviceBufferSize = 128_MB;
 
-// Ranges past this are bulk GPU output (streamout, particle vertices), not the small control
+// Writes past this are bulk GPU output (streamout, particle vertices), not the small control
 // blocks readback consumers poll, and copying them costs far more than it can be worth.
-static constexpr u64 WritebackRangeLimit = 1_MB;
+static constexpr u64 WritebackWriteLimit = 1_MB;
 // Held well under the ring so a batch cannot be overwritten before it has been handed over.
-static constexpr u64 WritebackBudget = 4_MB;
+static constexpr u64 WritebackBudget = 8_MB;
 static constexpr size_t MaxWritebackBatches = 2;
 
 BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
@@ -159,7 +159,11 @@ void BufferCache::DownloadBufferMemory(Buffer& buffer, VAddr device_addr, u64 si
 
 void BufferCache::MarkGpuWritten(VAddr device_addr, u64 size) {
     gpu_modified_ranges.Add(device_addr, size);
-    if (async_writeback) {
+    // Judge the size of this write on its own, before the range set coalesces it with its
+    // neighbours. Control blocks the guest polls tend to sit right next to the bulk output they
+    // describe, so once merged a 256 byte counter block is indistinguishable from the megabytes of
+    // particle vertices beside it, and filtering after the merge throws out both.
+    if (async_writeback && size <= WritebackWriteLimit) {
         gpu_written_ranges.Add(device_addr, size);
     }
 }
@@ -214,7 +218,9 @@ void BufferCache::RecordGpuWriteback() {
 
     gpu_written_ranges.ForEach([&](VAddr start, VAddr end) {
         const u64 size = end - start;
-        if (size > WritebackRangeLimit || size > budget) {
+        // Small writes that ended up adjacent merge into a larger run, which is real data worth
+        // taking; only skip when it no longer fits what is left of the budget.
+        if (size > budget) {
             return;
         }
         const BufferId buffer_id = page_table[start >> CACHING_PAGEBITS].buffer_id;
