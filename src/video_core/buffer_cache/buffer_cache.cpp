@@ -242,37 +242,50 @@ void BufferCache::RecordGpuWriteback() {
     u64 budget = WritebackBudget;
 
     gpu_written_ranges.ForEach([&](VAddr start, VAddr end) {
-        const u64 size = end - start;
-        // Small writes that ended up adjacent merge into a larger run, which is real data worth
-        // taking; only skip when it no longer fits what is left of the budget.
-        if (size > budget) {
-            return;
+        // A merged run can span several cache buffers -- bulk output sits right next to the header
+        // block describing it -- and judging the whole run by the buffer under its first page
+        // throws away every byte of it, every submit. Walk the page table instead and take each
+        // buffer-resident piece on its own.
+        VAddr cursor = start;
+        while (cursor < end) {
+            const BufferId buffer_id = page_table[cursor >> CACHING_PAGEBITS].buffer_id;
+            VAddr run_end = std::min(Common::AlignUp(cursor + 1, CACHING_PAGESIZE), end);
+            while (run_end < end && page_table[run_end >> CACHING_PAGEBITS].buffer_id == buffer_id) {
+                run_end = std::min(run_end + CACHING_PAGESIZE, end);
+            }
+            const u64 size = run_end - cursor;
+            const VAddr run_start = cursor;
+            cursor = run_end;
+            if (IsBufferInvalid(buffer_id)) {
+                // Nothing to copy from, so requeueing this would only spin on it every submit.
+                settled.emplace_back(run_start, size);
+                continue;
+            }
+            Buffer& buffer = slot_buffers[buffer_id];
+            if (!buffer.IsInBounds(run_start, size)) {
+                settled.emplace_back(run_start, size);
+                continue;
+            }
+            // Left queued rather than settled: what does not fit this submit's budget is real
+            // data and is picked up by a later submit.
+            if (size > budget) {
+                continue;
+            }
+            // Never stall the GPU thread on the ring; a skipped range is picked up next submit.
+            const auto [mapped, offset] = writeback_buffer.Map(size, 64, false);
+            if (mapped == nullptr) {
+                continue;
+            }
+            writeback_buffer.Commit();
+            planned.emplace_back(buffer.Handle(), vk::BufferCopy{
+                                                      .srcOffset = buffer.Offset(run_start),
+                                                      .dstOffset = offset,
+                                                      .size = size,
+                                                  });
+            batch.writebacks.push_back(GpuWriteback{run_start, offset, size});
+            settled.emplace_back(run_start, size);
+            budget -= size;
         }
-        const BufferId buffer_id = page_table[start >> CACHING_PAGEBITS].buffer_id;
-        if (IsBufferInvalid(buffer_id)) {
-            // Nothing to copy from, so requeueing this would only spin on it every submit.
-            settled.emplace_back(start, size);
-            return;
-        }
-        Buffer& buffer = slot_buffers[buffer_id];
-        if (!buffer.IsInBounds(start, size)) {
-            settled.emplace_back(start, size);
-            return;
-        }
-        // Never stall the GPU thread on the ring; a skipped range is picked up next submit.
-        const auto [mapped, offset] = writeback_buffer.Map(size, 64, false);
-        if (mapped == nullptr) {
-            return;
-        }
-        writeback_buffer.Commit();
-        planned.emplace_back(buffer.Handle(), vk::BufferCopy{
-                                                  .srcOffset = buffer.Offset(start),
-                                                  .dstOffset = offset,
-                                                  .size = size,
-                                              });
-        batch.writebacks.push_back(GpuWriteback{start, offset, size});
-        settled.emplace_back(start, size);
-        budget -= size;
     });
 
     for (const auto& [start, size] : settled) {
