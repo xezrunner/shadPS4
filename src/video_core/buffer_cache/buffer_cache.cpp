@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <algorithm>
+#include <chrono>
+#include <unordered_map>
 #include "common/alignment.h"
 #include "common/debug.h"
 #include "common/scope_exit.h"
@@ -34,6 +36,42 @@ static constexpr u64 WritebackWriteLimit = 1_MB;
 // Cap on how much one boundary may stage; control-block batches stay far below it.
 static constexpr u64 WritebackBudget = 40_MB;
 static constexpr size_t MaxWritebackBatches = 2;
+
+// TEMP: heavy-scene perf instrumentation; summarized at warning level every PerfLogInterval
+// submits from WritebackGpuData (GPU thread only -- never log from the fault path).
+struct WritebackPerfStats {
+    u64 submits;
+    u64 wait_serves;
+    u64 wait_ns;
+    u64 cpu_serves;
+    u64 uncovered_faults;
+    u64 download_bytes;
+    u64 download_ns;
+    u64 recorded_bytes;
+    u64 recorded_pieces;
+    u64 budget_skips;
+    u64 ring_skips;
+    u64 batch_cap_skips;
+    u64 delivered_bytes;
+    u64 deliver_ns;
+    u64 gc_runs;
+    u64 gc_deletions;
+    u64 gc_deleted_bytes;
+    u64 eager_serves;
+    u64 eager_wait_ns;
+    u64 eager_flushes;
+};
+static WritebackPerfStats perf{};
+static constexpr u64 PerfLogInterval = 512;
+// TEMP: bytes recorded per 16MB region, to attribute the writeback volume
+static std::unordered_map<u64, u64> perf_buckets;
+static u64 perf_last_log_ns = 0;
+
+static u64 PerfNowNs() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
 
 BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
                          AmdGpu::Liverpool* liverpool_, TextureCache& texture_cache_,
@@ -97,8 +135,13 @@ void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write) {
         if (!is_write && ServeReadFromWriteback(device_addr, size)) {
             return;
         }
+        // TEMP: time the fallback download (pays a full Finish per fault)
+        const u64 t0 = PerfNowNs();
+        perf.uncovered_faults++;
+        perf.download_bytes += size;
         Buffer& buffer = slot_buffers[FindBuffer(device_addr, size)];
         DownloadBufferMemory<false>(buffer, device_addr, size, is_write);
+        perf.download_ns += PerfNowNs() - t0;
     });
 }
 
@@ -133,9 +176,12 @@ bool BufferCache::TryServeFromFlushedWriteback(VAddr device_addr, u64 size) {
         return false;
     }
     // Delivery pops batches front to back, so ours has landed once the front tick moves past it.
+    const u64 t0 = PerfNowNs(); // TEMP
     writeback_cv.wait(lk, [&] {
         return pending_writebacks.empty() || pending_writebacks.front().tick > wait_tick;
     });
+    perf.eager_serves++;                  // TEMP
+    perf.eager_wait_ns += PerfNowNs() - t0; // TEMP
     return true;
 }
 
@@ -170,12 +216,17 @@ bool BufferCache::ServeReadFromWriteback(VAddr device_addr, u64 size) {
         // value, so the guard has nothing left to hold the read for.
         if (memory_tracker->IsRegionCpuModified(device_addr, size)) {
             memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
+            perf.cpu_serves++; // TEMP
             return true;
         }
         return false;
     }
+    // TEMP: time the fence-wait serve
+    const u64 t0 = PerfNowNs();
     scheduler.Wait(wait_tick);
     DeliverCompletedWritebacks();
+    perf.wait_serves++;
+    perf.wait_ns += PerfNowNs() - t0;
     return true;
 }
 
@@ -281,6 +332,35 @@ void BufferCache::WritebackGpuData() {
     }
     DeliverCompletedWritebacks();
     RecordGpuWriteback();
+    // TEMP: periodic perf summary; warning level so it passes the *:warning log filter
+    if (++perf.submits >= PerfLogInterval) {
+        const u64 now = PerfNowNs();
+        const double interval_ms = perf_last_log_ns ? (now - perf_last_log_ns) / 1e6 : 0.0;
+        perf_last_log_ns = now;
+        std::vector<std::pair<u64, u64>> top(perf_buckets.begin(), perf_buckets.end());
+        std::sort(top.begin(), top.end(), [](auto& a, auto& b) { return a.second > b.second; });
+        std::string buckets;
+        for (size_t i = 0; i < std::min<size_t>(top.size(), 8); ++i) {
+            buckets += fmt::format(" {:#x}:{}MB", top[i].first << 24, top[i].second >> 20);
+        }
+        perf_buckets.clear();
+        LOG_WARNING(Render_Vulkan, "wbperf: interval {:.0f}ms | top16MB regions:{}", interval_ms,
+                    buckets);
+        LOG_WARNING(Render_Vulkan,
+                    "wbperf: {} submits | eager-serves {} ({:.1f}ms) flushes {} | waits {} "
+                    "({:.1f}ms) | cpu-serves {} | uncovered {} "
+                    "({} KB, {:.1f}ms) | recorded {} MB in {} pieces | delivered {} MB "
+                    "({:.1f}ms) | skips budget {} ring {} batchcap {} | gc {} runs {} dels "
+                    "{} MB",
+                    perf.submits, perf.eager_serves, perf.eager_wait_ns / 1e6, perf.eager_flushes,
+                    perf.wait_serves, perf.wait_ns / 1e6, perf.cpu_serves,
+                    perf.uncovered_faults, perf.download_bytes / 1024, perf.download_ns / 1e6,
+                    perf.recorded_bytes >> 20, perf.recorded_pieces, perf.delivered_bytes >> 20,
+                    perf.deliver_ns / 1e6, perf.budget_skips, perf.ring_skips,
+                    perf.batch_cap_skips, perf.gc_runs, perf.gc_deletions,
+                    perf.gc_deleted_bytes >> 20);
+        perf = {};
+    }
 }
 
 // The guest is shown its fence at command-processing time, far ahead of the real GPU; the poll
@@ -295,11 +375,13 @@ void BufferCache::CommitPendingWriteback() {
     }
     DeliverCompletedWritebacks();
     if (RecordGpuWriteback()) {
+        perf.eager_flushes++; // TEMP
         scheduler.Flush();
     }
 }
 
 void BufferCache::DeliverCompletedWritebacks() {
+    const u64 t0 = PerfNowNs(); // TEMP
     std::unique_lock lk{writeback_mutex};
     bool popped = false;
     while (!pending_writebacks.empty() && scheduler.IsFree(pending_writebacks.front().tick)) {
@@ -336,6 +418,7 @@ void BufferCache::DeliverCompletedWritebacks() {
             // reads on without faulting. Guest-written parts count as served too -- the guest's
             // own value outranks the snapshot.
             memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
+            perf.delivered_bytes += size; // TEMP
         }
         pending_writebacks.pop_front();
         popped = true;
@@ -344,6 +427,7 @@ void BufferCache::DeliverCompletedWritebacks() {
     if (popped) {
         writeback_cv.notify_all();
     }
+    perf.deliver_ns += PerfNowNs() - t0; // TEMP
 }
 
 bool BufferCache::RecordGpuWriteback() {
@@ -353,6 +437,7 @@ bool BufferCache::RecordGpuWriteback() {
     {
         std::scoped_lock lk{writeback_mutex};
         if (pending_writebacks.size() >= MaxWritebackBatches) {
+            perf.batch_cap_skips++; // TEMP
             return false;
         }
     }
@@ -390,11 +475,13 @@ bool BufferCache::RecordGpuWriteback() {
             // Left queued rather than settled: what does not fit this submit's budget is real
             // data and is picked up by a later submit.
             if (size > budget) {
+                perf.budget_skips++; // TEMP
                 continue;
             }
             // Never stall the GPU thread on the ring; a skipped range is picked up next submit.
             const auto [mapped, offset] = writeback_buffer.Map(size, 64, false);
             if (mapped == nullptr) {
+                perf.ring_skips++; // TEMP
                 continue;
             }
             writeback_buffer.Commit();
@@ -406,6 +493,9 @@ bool BufferCache::RecordGpuWriteback() {
             batch.writebacks.push_back(GpuWriteback{run_start, offset, size});
             settled.emplace_back(run_start, size);
             budget -= size;
+            perf.recorded_bytes += size;              // TEMP
+            perf.recorded_pieces++;                   // TEMP
+            perf_buckets[run_start >> 24] += size;    // TEMP
         }
     });
 
@@ -1169,6 +1259,7 @@ void BufferCache::RunGarbageCollector() {
         return;
     }
     const bool aggressive = total_used_memory >= critical_gc_memory;
+    perf.gc_runs++; // TEMP
     const u64 ticks_to_destroy = std::min<u64>(aggressive ? 80 : 160, gc_tick);
     int max_deletions = aggressive ? 64 : 32;
     const auto clean_up = [&](BufferId buffer_id) {
@@ -1177,6 +1268,8 @@ void BufferCache::RunGarbageCollector() {
         }
         --max_deletions;
         Buffer& buffer = slot_buffers[buffer_id];
+        perf.gc_deletions++;                       // TEMP
+        perf.gc_deleted_bytes += buffer.SizeBytes(); // TEMP
         DownloadBufferMemory<true>(buffer, buffer.CpuAddr(), buffer.SizeBytes(), true);
         DeleteBuffer(buffer_id);
         return false;
