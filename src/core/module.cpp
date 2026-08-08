@@ -10,6 +10,7 @@
 #include "common/string_util.h"
 #include "core/aerolib/aerolib.h"
 #include "core/cpu_patches.h"
+#include "core/devtools/infamous_second_son_debug_menu.h"
 #include "core/libraries/error_codes.h"
 #include "core/loader/dwarf.h"
 #include "core/memory.h"
@@ -258,6 +259,8 @@ void Module::LoadModuleToMemory(u32& max_tls_index) {
             MemoryPatcher::g_eboot_address = base_virtual_addr;
             MemoryPatcher::g_eboot_image_size = base_size;
             MemoryPatcher::OnGameLoaded();
+            Devtools::InfamousSecondSonDebugMenu::InstallHooks(base_virtual_addr,
+                                                               MemoryPatcher::g_game_serial);
         }
     }
 }

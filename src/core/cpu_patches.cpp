@@ -826,6 +826,18 @@ void RegisterPatchModule(void* module_ptr, u64 module_size, void* trampoline_are
                                           trampoline_area_size));
 }
 
+void* AllocatePatchTrampoline(void* module_ptr, u64 size) {
+    auto* module = GetModule(module_ptr);
+    if (module == nullptr || size == 0) {
+        return nullptr;
+    }
+
+    auto& generator = module->trampoline_gen;
+    auto* allocation = const_cast<u8*>(generator.getCurr());
+    generator.nop(size);
+    return allocation;
+}
+
 void PrePatchInstructions(u64 segment_addr, u64 segment_size) {
 #if !defined(_WIN32) && !defined(__APPLE__)
     // Linux and others have an FS segment pointing to valid memory, so continue to do full

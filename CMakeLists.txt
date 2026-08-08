@@ -691,6 +691,8 @@ set(COMPANION_LIBS  src/core/libraries/companion/companion_httpd.cpp
 set(DEV_TOOLS src/core/devtools/layer.cpp
               src/core/devtools/layer.h
               src/core/devtools/layer_extra.cpp
+              src/core/devtools/infamous_second_son_debug_menu.cpp
+              src/core/devtools/infamous_second_son_debug_menu.h
               src/core/devtools/options.cpp
               src/core/devtools/options.h
               src/core/devtools/gcn/gcn_context_regs.cpp

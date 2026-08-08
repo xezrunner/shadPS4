@@ -11,6 +11,9 @@ namespace Core {
 void RegisterPatchModule(void* module_ptr, u64 module_size, void* trampoline_area_ptr,
                          u64 trampoline_area_size);
 
+/// Reserves executable trampoline space associated with a loaded module.
+void* AllocatePatchTrampoline(void* module_ptr, u64 size);
+
 /// Applies CPU patches that need to be done before beginning executions.
 void PrePatchInstructions(u64 segment_addr, u64 segment_size);
 
