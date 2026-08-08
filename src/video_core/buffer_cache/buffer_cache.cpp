@@ -28,11 +28,10 @@ static constexpr size_t DeviceBufferSize = 128_MB;
 
 // Writes up to this size are the small control blocks readback consumers poll (counters, emitter
 // headers); with readbacks disabled they are read-guarded and served at read time. Writes past it
-// are bulk GPU output (streamout, particle state), delivered by the async writeback instead.
+// are bulk GPU output (streamout, particle state) that only the GPU consumes again; it is not
+// carried back at all.
 static constexpr u64 WritebackWriteLimit = 1_MB;
-// Sized so one boundary can carry the bulk output a frame produces; the double-buffered particle
-// state Second Son round-trips is 12MB per copy, and dropping a piece that never fits would lose
-// the only path that data has back to the guest.
+// Cap on how much one boundary may stage; control-block batches stay far below it.
 static constexpr u64 WritebackBudget = 40_MB;
 static constexpr size_t MaxWritebackBatches = 2;
 
@@ -211,11 +210,10 @@ void BufferCache::MarkGpuWritten(VAddr device_addr, u64 size) {
     if (!async_writeback) {
         return;
     }
-    // With readbacks disabled every write is recorded: the small control blocks both deliver at
-    // submit boundaries and back the guarded read faults, and the bulk output has no other way to
-    // reach the guest. Relaxed mode keeps only the small writes.
-    if (EmulatorSettings.GetReadbacksMode() == GpuReadbacksMode::Disabled ||
-        size <= WritebackWriteLimit) {
+    // Only the small control blocks are carried back. Bulk output is consumed by the GPU alone
+    // -- Second Son's particles run correctly off the guarded blocks with none of it delivered
+    // -- and carrying it copied tens of megabytes per frame the guest never read.
+    if (size <= WritebackWriteLimit) {
         gpu_written_ranges.Add(device_addr, size);
     }
 }
