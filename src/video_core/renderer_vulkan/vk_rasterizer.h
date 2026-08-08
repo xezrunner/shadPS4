@@ -69,6 +69,7 @@ public:
     u64 Flush();
     void Finish();
     void OnSubmit();
+    void CommitPendingWriteback();
 
     PipelineCache& GetPipelineCache() {
         return pipeline_cache;

@@ -90,6 +90,9 @@ void BufferCache::InvalidateMemory(VAddr device_addr, u64 size) {
 }
 
 void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write) {
+    if (!is_write && TryServeFromFlushedWriteback(device_addr, size)) {
+        return;
+    }
     liverpool->SendCommand<true>([this, device_addr, size, is_write] {
         if (!is_write && ServeReadFromWriteback(device_addr, size)) {
             return;
@@ -97,6 +100,43 @@ void BufferCache::ReadMemory(VAddr device_addr, u64 size, bool is_write) {
         Buffer& buffer = slot_buffers[FindBuffer(device_addr, size)];
         DownloadBufferMemory<false>(buffer, device_addr, size, is_write);
     });
+}
+
+// The common poll follows a fence whose writeback CommitPendingWriteback already recorded and
+// submitted; the guest thread only has to wait for the priority delivery to land. Blocking here
+// instead of on the GPU thread keeps the command processor recording the next frame while the
+// game waits out the fence it was shown early.  :async-buffer-writeback
+bool BufferCache::TryServeFromFlushedWriteback(VAddr device_addr, u64 size) {
+    if (!async_writeback ||
+        EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Disabled) {
+        return false;
+    }
+    const VAddr end = device_addr + size;
+    std::unique_lock lk{writeback_mutex};
+    u64 wait_tick = 0;
+    bool covered = false;
+    for (const auto& batch : pending_writebacks) {
+        // A batch on the current tick has not been submitted; only the GPU thread may flush, so
+        // reads it covers fall back to the command-stream serve.
+        if (batch.tick >= scheduler.CurrentTick()) {
+            continue;
+        }
+        for (const auto& wb : batch.writebacks) {
+            if (wb.device_addr < end && device_addr < wb.device_addr + wb.size) {
+                covered = true;
+                wait_tick = batch.tick;
+                break;
+            }
+        }
+    }
+    if (!covered) {
+        return false;
+    }
+    // Delivery pops batches front to back, so ours has landed once the front tick moves past it.
+    writeback_cv.wait(lk, [&] {
+        return pending_writebacks.empty() || pending_writebacks.front().tick > wait_tick;
+    });
+    return true;
 }
 
 // A guarded poll follows a fence the guest was shown at command-processing time, so the write it
@@ -113,12 +153,15 @@ bool BufferCache::ServeReadFromWriteback(VAddr device_addr, u64 size) {
     const VAddr end = device_addr + size;
     u64 wait_tick = 0;
     bool covered = false;
-    for (const auto& batch : pending_writebacks) {
-        for (const auto& wb : batch.writebacks) {
-            if (wb.device_addr < end && device_addr < wb.device_addr + wb.size) {
-                covered = true;
-                wait_tick = batch.tick;
-                break;
+    {
+        std::scoped_lock lk{writeback_mutex};
+        for (const auto& batch : pending_writebacks) {
+            for (const auto& wb : batch.writebacks) {
+                if (wb.device_addr < end && device_addr < wb.device_addr + wb.size) {
+                    covered = true;
+                    wait_tick = batch.tick;
+                    break;
+                }
             }
         }
     }
@@ -229,14 +272,36 @@ void BufferCache::WritebackGpuData() {
     async_writeback = EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Precise;
     if (!async_writeback) {
         gpu_written_ranges.Clear();
-        pending_writebacks.clear();
+        {
+            std::scoped_lock lk{writeback_mutex};
+            pending_writebacks.clear();
+        }
+        writeback_cv.notify_all();
         return;
     }
     DeliverCompletedWritebacks();
     RecordGpuWriteback();
 }
 
+// The guest is shown its fence at command-processing time, far ahead of the real GPU; the poll
+// that follows would fault and stall the whole command processor waiting the tick out. Submitting
+// the control-block writeback right at the fence instead lets the GPU start on it immediately and
+// the priority thread deliver it the moment it completes -- the poll then blocks only the guest
+// thread, and only for the remainder of the actual GPU work.  :async-buffer-writeback
+void BufferCache::CommitPendingWriteback() {
+    if (!async_writeback ||
+        EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Disabled) {
+        return;
+    }
+    DeliverCompletedWritebacks();
+    if (RecordGpuWriteback()) {
+        scheduler.Flush();
+    }
+}
+
 void BufferCache::DeliverCompletedWritebacks() {
+    std::unique_lock lk{writeback_mutex};
+    bool popped = false;
     while (!pending_writebacks.empty() && scheduler.IsFree(pending_writebacks.front().tick)) {
         for (const auto& [device_addr, staging_offset, size] :
              pending_writebacks.front().writebacks) {
@@ -273,15 +338,23 @@ void BufferCache::DeliverCompletedWritebacks() {
             memory_tracker->UnmarkRegionAsGpuModified(device_addr, size);
         }
         pending_writebacks.pop_front();
+        popped = true;
+    }
+    lk.unlock();
+    if (popped) {
+        writeback_cv.notify_all();
     }
 }
 
-void BufferCache::RecordGpuWriteback() {
+bool BufferCache::RecordGpuWriteback() {
     // A range we cannot take right now stays queued for the next submit. Discarding it because the
     // ring or the batch list happened to be busy loses the only copy of that GPU output, and for
     // anything the guest polls every frame that reads as the value never having been produced.
-    if (pending_writebacks.size() >= MaxWritebackBatches) {
-        return;
+    {
+        std::scoped_lock lk{writeback_mutex};
+        if (pending_writebacks.size() >= MaxWritebackBatches) {
+            return false;
+        }
     }
 
     WritebackBatch batch;
@@ -341,7 +414,7 @@ void BufferCache::RecordGpuWriteback() {
     }
 
     if (planned.empty()) {
-        return;
+        return false;
     }
     scheduler.EndRendering();
     const auto cmdbuf = scheduler.CommandBuffer();
@@ -365,7 +438,14 @@ void BufferCache::RecordGpuWriteback() {
         }
     }
     batch.tick = scheduler.CurrentTick();
-    pending_writebacks.push_back(std::move(batch));
+    {
+        std::scoped_lock lk{writeback_mutex};
+        pending_writebacks.push_back(std::move(batch));
+    }
+    // Queued before the flush that submits this tick so the priority thread delivers the moment
+    // the GPU completes it; a guarded poll then usually finds its page already served.
+    scheduler.DeferPriorityOperation([this] { DeliverCompletedWritebacks(); });
+    return true;
 }
 
 void BufferCache::BindVertexBuffers(

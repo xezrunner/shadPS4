@@ -712,8 +712,11 @@ Liverpool::Task Liverpool::ProcessGraphics(std::span<const u32> dcb, std::span<c
             }
             case PM4ItOpcode::EventWriteEop: {
                 const auto* event_eop = reinterpret_cast<const PM4CmdEventWriteEop*>(header);
+                // The guest may poll GPU written control blocks the moment this fence is visible;
+                // submit their writeback first so the poll only waits on the delivery.
                 if (rasterizer) {
                     rasterizer->ProcessDownloadImages();
+                    rasterizer->CommitPendingWriteback();
                 }
                 event_eop->SignalFence(
                     [](void* address, u64 data, u32 num_bytes) {
@@ -1143,8 +1146,10 @@ Liverpool::Task Liverpool::ProcessCompute(std::span<const u32> acb, u32 vqid) {
         }
         case PM4ItOpcode::ReleaseMem: {
             const auto* release_mem = reinterpret_cast<const PM4CmdReleaseMem*>(header);
+            // Same as EventWriteEop: make the writeback visible-in-flight before the fence is.
             if (rasterizer) {
                 rasterizer->ProcessDownloadImages();
+                rasterizer->CommitPendingWriteback();
             }
             release_mem->SignalFence(
                 [pipe_id = queue.pipe_id] {
