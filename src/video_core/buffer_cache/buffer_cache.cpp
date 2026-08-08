@@ -197,30 +197,48 @@ void BufferCache::DeliverCompletedWritebacks() {
     while (!pending_writebacks.empty() && scheduler.IsFree(pending_writebacks.front().tick)) {
         for (const auto& [device_addr, staging_offset, size] :
              pending_writebacks.front().writebacks) {
-            // The guest writing the page itself outranks anything the GPU produced; delivering
-            // over it would lose the write. A newer GPU write is not a reason to drop: this memory
-            // *is* the GPU output on real hardware, so an older complete snapshot is still closer
-            // to the truth than what is there now, and the next batch corrects it.
-            if (memory_tracker->IsRegionCpuModified(device_addr, size)) {
-                continue;
-            }
-            memory->TryWriteBacking(std::bit_cast<u8*>(device_addr),
-                                    writeback_buffer.mapped_data.data() + staging_offset, size);
+            // The guest writing a page itself outranks anything the GPU produced there; delivering
+            // over it would lose the write. Skip only those pages rather than the whole range: a
+            // range can easily cover both a block the guest rewrites every frame and the control
+            // block beside it that it only ever reads, and dropping both leaves the second stale.
+            // A newer GPU write is not a reason to skip. This memory *is* the GPU output on real
+            // hardware, so an older complete snapshot is closer to the truth than what is there
+            // now, and the next batch corrects it.
+            const u8* const staged = writeback_buffer.mapped_data.data() + staging_offset;
+            const VAddr range_end = device_addr + size;
+            VAddr cursor = device_addr;
+            const auto deliver_upto = [&](VAddr stop) {
+                if (stop > cursor) {
+                    memory->TryWriteBacking(std::bit_cast<u8*>(cursor),
+                                            staged + (cursor - device_addr), stop - cursor);
+                }
+            };
+            memory_tracker->ForEachCpuModifiedRange(
+                device_addr, size, [&](VAddr owned_addr, u64 owned_size) {
+                    const VAddr owned_end = std::min(owned_addr + owned_size, range_end);
+                    if (owned_end <= cursor) {
+                        return;
+                    }
+                    deliver_upto(std::min(owned_addr, range_end));
+                    cursor = owned_end;
+                });
+            deliver_upto(range_end);
         }
         pending_writebacks.pop_front();
     }
 }
 
 void BufferCache::RecordGpuWriteback() {
-    SCOPE_EXIT {
-        gpu_written_ranges.Clear();
-    };
+    // A range we cannot take right now stays queued for the next submit. Discarding it because the
+    // ring or the batch list happened to be busy loses the only copy of that GPU output, and for
+    // anything the guest polls every frame that reads as the value never having been produced.
     if (pending_writebacks.size() >= MaxWritebackBatches) {
         return;
     }
 
     WritebackBatch batch;
     boost::container::small_vector<std::pair<vk::Buffer, vk::BufferCopy>, 16> planned;
+    boost::container::small_vector<std::pair<VAddr, u64>, 16> settled;
     u64 budget = WritebackBudget;
 
     gpu_written_ranges.ForEach([&](VAddr start, VAddr end) {
@@ -232,10 +250,13 @@ void BufferCache::RecordGpuWriteback() {
         }
         const BufferId buffer_id = page_table[start >> CACHING_PAGEBITS].buffer_id;
         if (IsBufferInvalid(buffer_id)) {
+            // Nothing to copy from, so requeueing this would only spin on it every submit.
+            settled.emplace_back(start, size);
             return;
         }
         Buffer& buffer = slot_buffers[buffer_id];
         if (!buffer.IsInBounds(start, size)) {
+            settled.emplace_back(start, size);
             return;
         }
         // Never stall the GPU thread on the ring; a skipped range is picked up next submit.
@@ -250,8 +271,13 @@ void BufferCache::RecordGpuWriteback() {
                                                   .size = size,
                                               });
         batch.writebacks.push_back(GpuWriteback{start, offset, size});
+        settled.emplace_back(start, size);
         budget -= size;
     });
+
+    for (const auto& [start, size] : settled) {
+        gpu_written_ranges.Subtract(start, size);
+    }
 
     if (planned.empty()) {
         return;
