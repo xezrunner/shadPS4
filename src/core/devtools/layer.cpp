@@ -14,6 +14,7 @@
 #include "core/emulator_state.h"
 #include "imgui/imgui_std.h"
 #include "imgui_internal.h"
+#include "infamous_second_son_debug_menu.h"
 #include "options.h"
 #include "video_core/renderer_vulkan/vk_presenter.h"
 #include "widget/frame_dump.h"
@@ -125,6 +126,10 @@ void L::DrawMenuBar() {
         if (BeginMenu("Debug")) {
             MenuItem("Memory map", nullptr, &memory_map.open);
             MenuItem("Module list", nullptr, &module_list.open);
+            if (InfamousSecondSonDebugMenu::IsAvailable() &&
+                MenuItem("inFAMOUS Second Son debug menu")) {
+                InfamousSecondSonDebugMenu::SetOpen(true);
+            }
             ImGui::EndMenu();
         }
 
@@ -269,6 +274,7 @@ void L::DrawAdvanced() {
     if (module_list.open) {
         module_list.Draw();
     }
+    InfamousSecondSonDebugMenu::Draw();
 }
 
 void L::DrawSimple() {

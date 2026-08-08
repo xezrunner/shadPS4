@@ -15,6 +15,7 @@
 #include "common/memory_patcher.h"
 #include "common/path_util.h"
 #include "core/debugger.h"
+#include "core/devtools/infamous_second_son_debug_menu.h"
 #include "core/emulator_settings.h"
 #include "core/emulator_state.h"
 #include "core/file_sys/fs.h"
@@ -63,6 +64,7 @@ int main(int argc, char* argv[]) {
     bool configGlobal = false;
     bool bigPicture = false;
     bool sameProcess = false;
+    bool infamousDebugMenu = false;
 
     std::optional<std::filesystem::path> addGameFolder;
     std::optional<std::filesystem::path> setAddonFolder;
@@ -85,6 +87,8 @@ int main(int argc, char* argv[]) {
 
     app.add_flag("--wait-for-debugger", waitForDebugger);
     app.add_option("--wait-for-pid", waitPid);
+    app.add_flag("--infamous-debug-menu", infamousDebugMenu,
+                 "Open the inFAMOUS Second Son debug menu at startup");
 
     app.add_flag("--show-fps", showFps);
     app.add_flag("--config-clean", configClean);
@@ -209,6 +213,9 @@ int main(int argc, char* argv[]) {
 
     if (configGlobal)
         EmulatorSettings.SetConfigMode(ConfigMode::Global);
+
+    if (infamousDebugMenu)
+        Core::Devtools::InfamousSecondSonDebugMenu::SetOpen(true);
 
     // ---- Resolve game path or ID ----
     std::filesystem::path ebootPath(*gamePath);
