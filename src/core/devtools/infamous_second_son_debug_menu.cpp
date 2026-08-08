@@ -32,6 +32,7 @@ enum class ActionKind : u32 {
     None,
     SetPower,
     MaxAllPowerRanks,
+    SetSimulationSpeed,
     LoadWorld,
 };
 
@@ -85,6 +86,7 @@ constexpr uintptr_t IsPowerAvailableAddress = 0x011E2E70;
 constexpr uintptr_t FindActiveActionByKindAddress = 0x01469440;
 constexpr uintptr_t MaxSkillRanksAddress = 0x010E9BB0;
 constexpr uintptr_t RebuildPowerActionsAddress = 0x012064E0;
+constexpr uintptr_t SetSimulationSpeedAddress = 0x010E7C00;
 constexpr uintptr_t PowerOwnerAddress = 0x02D0CFE0;
 constexpr uintptr_t PowerRegistryManagerAddress = 0x02D0D3A0;
 constexpr uintptr_t PowerRegistryReadyAddress = 0x02D0D3A8;
@@ -249,6 +251,8 @@ uintptr_t eboot_base_address = 0;
 ActionKind pending_action = ActionKind::None;
 s32 pending_power = 0;
 std::array<char, WorldNameCapacity> pending_world{};
+float pending_simulation_speed = 1.0f;
+float simulation_speed = 1.0f;
 std::atomic<ActionState> action_state = ActionState::Idle;
 std::atomic<ActionOutcome> action_outcome = ActionOutcome::None;
 
@@ -318,6 +322,7 @@ using IsPowerAvailable = u8 PS4_SYSV_ABI (*)(void* state, s32 power, s32 paramet
 using FindActiveActionByKind = void* PS4_SYSV_ABI (*)(void* action_owner, s32 type_id);
 using MaxSkillRanks = void PS4_SYSV_ABI (*)(void* unused, s32 skill);
 using RebuildPowerActions = void PS4_SYSV_ABI (*)(void* owner);
+using SetSimulationSpeed = void PS4_SYSV_ABI (*)(float speed);
 using InitializeWorldTransitionRequest = void PS4_SYSV_ABI (*)(void* request);
 using SetWorldTransitionRequestName = void PS4_SYSV_ABI (*)(void* request, u16** name);
 using DestroyWorldTransitionRequest = void PS4_SYSV_ABI (*)(void* request);
@@ -524,6 +529,10 @@ void DrainPendingAction() {
         break;
     case ActionKind::MaxAllPowerRanks:
         outcome = ExecuteMaxAllPowerRanks();
+        break;
+    case ActionKind::SetSimulationSpeed:
+        GuestFunction<SetSimulationSpeed>(SetSimulationSpeedAddress)(pending_simulation_speed);
+        outcome = ActionOutcome::Succeeded;
         break;
     case ActionKind::LoadWorld:
         outcome = ExecuteWorldTransition(pending_world.data());
@@ -890,6 +899,32 @@ void DrawPowers() {
         ImGui::SetTooltip(
             "Uses the retail progression setters; the maxed ranks can be written to the save.");
     }
+}
+
+void DrawSimulationSpeed() {
+    if (!ImGui::CollapsingHeader("Simulation", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    const bool busy = action_state.load(std::memory_order_acquire) != ActionState::Idle;
+    ImGui::BeginDisabled(busy);
+    ImGui::SetNextItemWidth(260.0f);
+    ImGui::SliderFloat("Game speed", &simulation_speed, 0.0f, 2.0f, "%.2fx",
+                       ImGuiSliderFlags_AlwaysClamp);
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+        pending_simulation_speed = simulation_speed;
+        QueueAction(ActionKind::SetSimulationSpeed);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset##simulation_speed")) {
+        simulation_speed = 1.0f;
+        pending_simulation_speed = 1.0f;
+        QueueAction(ActionKind::SetSimulationSpeed);
+    }
+    ImGui::EndDisabled();
+    ImGui::TextDisabled(
+        "Uses the retail gameplay-clock scale slot; 0.00x pauses simulation. Audio pitch is "
+        "not changed.");
 }
 
 void DrawWorldLoader() {
@@ -1300,6 +1335,7 @@ void Draw() {
     }
 
     DrawPowers();
+    DrawSimulationSpeed();
     DrawWorldLoader();
     DrawDash();
     ImGui::End();
