@@ -5,6 +5,7 @@
 #include "common/alignment.h"
 #include "common/debug.h"
 #include "common/scope_exit.h"
+#include "core/emulator_settings.h"
 #include "core/memory.h"
 #include "video_core/amdgpu/liverpool.h"
 #include "video_core/buffer_cache/buffer_cache.h"
@@ -19,8 +20,16 @@ namespace VideoCore {
 static constexpr size_t DataShareBufferSize = 64_KB;
 static constexpr size_t StagingBufferSize = 512_MB;
 static constexpr size_t DownloadBufferSize = 32_MB;
+static constexpr size_t WritebackBufferSize = 16_MB;
 static constexpr size_t UboStreamBufferSize = 64_MB;
 static constexpr size_t DeviceBufferSize = 128_MB;
+
+// Ranges past this are bulk GPU output (streamout, particle vertices), not the small control
+// blocks readback consumers poll, and copying them costs far more than it can be worth.
+static constexpr u64 WritebackRangeLimit = 1_MB;
+// Held well under the ring so a batch cannot be overwritten before it has been handed over.
+static constexpr u64 WritebackBudget = 4_MB;
+static constexpr size_t MaxWritebackBatches = 2;
 
 BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& scheduler_,
                          AmdGpu::Liverpool* liverpool_, TextureCache& texture_cache_,
@@ -31,6 +40,7 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
       staging_buffer{instance, scheduler, MemoryUsage::Upload, StagingBufferSize},
       stream_buffer{instance, scheduler, MemoryUsage::Stream, UboStreamBufferSize},
       download_buffer{instance, scheduler, MemoryUsage::Download, DownloadBufferSize},
+      writeback_buffer{instance, scheduler, MemoryUsage::Download, WritebackBufferSize},
       device_buffer{instance, scheduler, MemoryUsage::DeviceLocal, DeviceBufferSize},
       gds_buffer{instance, scheduler, MemoryUsage::Stream, 0, AllFlags, DataShareBufferSize},
       bda_pagetable_buffer{instance, scheduler, MemoryUsage::DeviceLocal,
@@ -40,6 +50,7 @@ BufferCache::BufferCache(const Vulkan::Instance& instance_, Vulkan::Scheduler& s
                           "BDA Page Table Buffer");
 
     memory_tracker = std::make_unique<MemoryTracker>(tracker);
+    async_writeback = EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Precise;
 
     std::memset(gds_buffer.mapped_data.data(), 0, DataShareBufferSize);
 
@@ -151,6 +162,117 @@ void BufferCache::DownloadBufferMemory(Buffer& buffer, VAddr device_addr, u64 si
         scheduler.Finish();
         write_data();
     }
+}
+
+void BufferCache::MarkGpuWritten(VAddr device_addr, u64 size) {
+    gpu_modified_ranges.Add(device_addr, size);
+    if (async_writeback) {
+        gpu_written_ranges.Add(device_addr, size);
+    }
+}
+
+// Guest code may only look at GPU produced data after a fence, so handing it over one submit late
+// is still in time. Doing that here rather than from a read fault keeps the transfer off the guest
+// thread entirely, which is what makes readback affordable with the fault paths disabled: games
+// that feed GPU results back into their own logic (auto exposure, particle counters) see real
+// values instead of zeros.  :async-buffer-writeback
+void BufferCache::WritebackGpuData() {
+    // Precise mode services reads from the fault path, which owns the invalidation rules and would
+    // race this one; leave it alone.
+    async_writeback = EmulatorSettings.GetReadbacksMode() != GpuReadbacksMode::Precise;
+    if (!async_writeback) {
+        gpu_written_ranges.Clear();
+        pending_writebacks.clear();
+        return;
+    }
+    DeliverCompletedWritebacks();
+    RecordGpuWriteback();
+}
+
+void BufferCache::DeliverCompletedWritebacks() {
+    while (!pending_writebacks.empty() && scheduler.IsFree(pending_writebacks.front().tick)) {
+        for (const auto& [device_addr, staging_offset, size] :
+             pending_writebacks.front().writebacks) {
+            // The guest writing the page itself outranks anything the GPU produced; delivering
+            // over it would lose the write. A newer GPU write is not a reason to drop: this memory
+            // *is* the GPU output on real hardware, so an older complete snapshot is still closer
+            // to the truth than what is there now, and the next batch corrects it.
+            if (memory_tracker->IsRegionCpuModified(device_addr, size)) {
+                continue;
+            }
+            memory->TryWriteBacking(std::bit_cast<u8*>(device_addr),
+                                    writeback_buffer.mapped_data.data() + staging_offset, size);
+        }
+        pending_writebacks.pop_front();
+    }
+}
+
+void BufferCache::RecordGpuWriteback() {
+    SCOPE_EXIT {
+        gpu_written_ranges.Clear();
+    };
+    if (pending_writebacks.size() >= MaxWritebackBatches) {
+        return;
+    }
+
+    WritebackBatch batch;
+    boost::container::small_vector<std::pair<vk::Buffer, vk::BufferCopy>, 16> planned;
+    u64 budget = WritebackBudget;
+
+    gpu_written_ranges.ForEach([&](VAddr start, VAddr end) {
+        const u64 size = end - start;
+        if (size > WritebackRangeLimit || size > budget) {
+            return;
+        }
+        const BufferId buffer_id = page_table[start >> CACHING_PAGEBITS].buffer_id;
+        if (IsBufferInvalid(buffer_id)) {
+            return;
+        }
+        Buffer& buffer = slot_buffers[buffer_id];
+        if (!buffer.IsInBounds(start, size)) {
+            return;
+        }
+        // Never stall the GPU thread on the ring; a skipped range is picked up next submit.
+        const auto [mapped, offset] = writeback_buffer.Map(size, 64, false);
+        if (mapped == nullptr) {
+            return;
+        }
+        writeback_buffer.Commit();
+        planned.emplace_back(buffer.Handle(), vk::BufferCopy{
+                                                  .srcOffset = buffer.Offset(start),
+                                                  .dstOffset = offset,
+                                                  .size = size,
+                                              });
+        batch.writebacks.push_back(GpuWriteback{start, offset, size});
+        budget -= size;
+    });
+
+    if (planned.empty()) {
+        return;
+    }
+    scheduler.EndRendering();
+    const auto cmdbuf = scheduler.CommandBuffer();
+    const vk::MemoryBarrier2 barrier = {
+        .srcStageMask = vk::PipelineStageFlagBits2::eAllCommands,
+        .srcAccessMask = vk::AccessFlagBits2::eMemoryWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eTransfer,
+        .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+    };
+    cmdbuf.pipelineBarrier2(vk::DependencyInfo{
+        .memoryBarrierCount = 1,
+        .pMemoryBarriers = &barrier,
+    });
+    // Ranges arrive in address order, so runs sharing a source buffer are already adjacent.
+    boost::container::small_vector<vk::BufferCopy, 16> copies;
+    for (size_t i = 0; i < planned.size(); ++i) {
+        copies.push_back(planned[i].second);
+        if (i + 1 == planned.size() || planned[i + 1].first != planned[i].first) {
+            cmdbuf.copyBuffer(planned[i].first, writeback_buffer.Handle(), copies);
+            copies.clear();
+        }
+    }
+    batch.tick = scheduler.CurrentTick();
+    pending_writebacks.push_back(std::move(batch));
 }
 
 void BufferCache::BindVertexBuffers(const Vulkan::GraphicsPipeline& pipeline) {
@@ -318,7 +440,7 @@ void BufferCache::CopyBuffer(VAddr dst, VAddr src, u32 num_bytes, bool dst_gds, 
         const auto buffer_id = FindBuffer(dst, num_bytes);
         auto& buffer = slot_buffers[buffer_id];
         SynchronizeBuffer(buffer, dst, num_bytes, true, true);
-        gpu_modified_ranges.Add(dst, num_bytes);
+        MarkGpuWritten(dst, num_bytes);
         return buffer;
     }();
     const vk::BufferCopy region = {
@@ -395,7 +517,7 @@ std::pair<Buffer*, u32> BufferCache::ObtainBuffer(VAddr device_addr, u32 size, b
     Buffer& buffer = slot_buffers[buffer_id];
     SynchronizeBuffer(buffer, device_addr, size, is_written, is_texel_buffer);
     if (is_written) {
-        gpu_modified_ranges.Add(device_addr, size);
+        MarkGpuWritten(device_addr, size);
     }
     return {&buffer, buffer.Offset(device_addr)};
 }

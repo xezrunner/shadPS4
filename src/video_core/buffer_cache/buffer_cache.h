@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <deque>
 #include <boost/container/small_vector.hpp>
 #include "common/lru_cache.h"
 #include "common/slot_vector.h"
@@ -111,6 +112,9 @@ public:
     /// Flushes any GPU modified buffer in the logical page range back to CPU memory.
     void ReadMemory(VAddr device_addr, u64 size, bool is_write = false);
 
+    /// Hands buffer data the GPU produced during the last submit back to guest memory.
+    void WritebackGpuData();
+
     /// Binds host vertex buffers for the current draw.
     void BindVertexBuffers(const Vulkan::GraphicsPipeline& pipeline);
 
@@ -172,6 +176,12 @@ private:
     template <bool async>
     void DownloadBufferMemory(Buffer& buffer, VAddr device_addr, u64 size, bool is_write);
 
+    void MarkGpuWritten(VAddr device_addr, u64 size);
+
+    void DeliverCompletedWritebacks();
+
+    void RecordGpuWriteback();
+
     [[nodiscard]] OverlapResult ResolveOverlaps(VAddr device_addr, u32 wanted_size);
 
     void JoinOverlap(BufferId new_buffer_id, BufferId overlap_id, bool accumulate_stream_score);
@@ -195,6 +205,17 @@ private:
 
     void WriteDataBuffer(Buffer& buffer, VAddr address, const void* value, u32 num_bytes);
 
+    /// A copy of one GPU written range sitting in the writeback ring, waiting for its submit.
+    struct GpuWriteback {
+        VAddr device_addr;
+        u64 staging_offset;
+        u64 size;
+    };
+    struct WritebackBatch {
+        u64 tick;
+        boost::container::small_vector<GpuWriteback, 16> writebacks;
+    };
+
     void TouchBuffer(const Buffer& buffer);
 
     void DeleteBuffer(BufferId buffer_id);
@@ -209,6 +230,7 @@ private:
     StreamBuffer staging_buffer;
     StreamBuffer stream_buffer;
     StreamBuffer download_buffer;
+    StreamBuffer writeback_buffer;
     StreamBuffer device_buffer;
     Buffer gds_buffer;
     Buffer bda_pagetable_buffer;
@@ -219,6 +241,9 @@ private:
     u64 gc_tick = 0;
     Common::LeastRecentlyUsedCache<BufferId, u64> lru_cache;
     RangeSet gpu_modified_ranges;
+    RangeSet gpu_written_ranges;
+    std::deque<WritebackBatch> pending_writebacks;
+    bool async_writeback = false;
     SplitRangeMap<BufferId> buffer_ranges;
     PageTable page_table;
 };
